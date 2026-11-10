@@ -61,6 +61,6 @@ public protocol ArticleEditing {
   mutating func apply(_ edits: [TextEdit], basedOn revisionID: UUID, source: EditSource) throws
     -> Draft
 
-  /// 快照包含当前稿和完整版本历史。
-  func snapshot() throws -> Data
+  /// 一次读取当前版本，快照包含完整历史。
+  func archive() throws -> ArticleArchive
 }

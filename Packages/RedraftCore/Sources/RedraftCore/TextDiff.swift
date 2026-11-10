@@ -5,7 +5,7 @@ public enum DiffSegment: Equatable, Sendable {
   case replaced(before: String, after: String)
 }
 
-public protocol TextDiffing {
-  /// 按阅读顺序覆盖两稿全文，保留空白和标点。
+public protocol TextDiffing: Sendable {
+  /// 按阅读顺序分段，拼回两侧应分别得到两稿的原始 UTF-8。
   func compare(_ before: String, to after: String) -> [DiffSegment]
 }
