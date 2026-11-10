@@ -1,0 +1,25 @@
+name: Redraft
+options:
+  deploymentTarget:
+    macOS: "13.0"
+packages:
+  RedraftCore:
+    path: Packages/RedraftCore
+targets:
+  Redraft:
+    type: application
+    platform: macOS
+    sources:
+      - App
+    dependencies:
+      - package: RedraftCore
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      PRODUCT_BUNDLE_IDENTIFIER: dev.sured.Redraft
+      MARKETING_VERSION: "0.1.0"
+      CURRENT_PROJECT_VERSION: 1
+schemes:
+  Redraft:
+    build:
+      targets:
+        Redraft: all
