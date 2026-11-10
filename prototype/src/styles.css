@@ -520,7 +520,7 @@ kbd {
   -webkit-box-decoration-break: clone; box-decoration-break: clone;
 }
 .hunk:hover { box-shadow: 0 0 0 2px var(--fill-hover); background: var(--fill); }
-.hunk.is-focused { box-shadow: 0 0 0 2px var(--accent); }
+.hunk.is-focused { box-shadow: 0 0 0 1.5px var(--accent); background: var(--accent-softer); }
 .hunk.is-adopt .chosen { text-decoration: underline dotted var(--ins-line); text-decoration-thickness: 2px; text-underline-offset: 5px; }
 .hunk.is-keep .chosen { text-decoration: underline dotted var(--text-3); text-decoration-thickness: 2px; text-underline-offset: 5px; }
 .hunk.is-rewrite .chosen { text-decoration: underline dotted var(--accent); text-decoration-thickness: 2px; text-underline-offset: 5px; color: var(--accent-text); }

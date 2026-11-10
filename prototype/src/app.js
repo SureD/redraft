@@ -538,7 +538,7 @@
     if (act === 'go-review') setMode('review');
     if (act === 'finish') finishRound();
     if (act === 'snapshot') saveVersion();
-    if (act === 'inspector') { ui.inspectorOpen = !ui.inspectorOpen; renderInspector(); applyLayout(); renderToolbar(); if (ui.mode === 'review') positionHunkBar(); requestAnimationFrame(renderGutter); }
+    if (act === 'inspector') { ui.inspectorOpen = !ui.inspectorOpen; ui.showBar = !ui.inspectorOpen; renderInspector(); applyLayout(); renderToolbar(); if (ui.mode === 'review') positionHunkBar(); requestAnimationFrame(renderGutter); }
     if (act === 'more') openMoreMenu(b);
   });
 
@@ -1563,6 +1563,8 @@
     const anchorNodes = $$(`[data-key="${CSS.escape(key)}"]`, el.content);
     const anchor = (ui.diffLayout === 'stacked' ? anchorNodes[1] : anchorNodes[0]) || anchorNodes[0];
     const initial = h.decision && h.decision.choice === 'rewrite' ? h.decision.text : (h.ins || h.del);
+    const bar = $('#hunk-bar');
+    if (bar) bar.remove();
     const node = openPopover(anchor, `<form class="pop-form" aria-label="自己重写这处">
         <div class="small muted">原句</div><p class="sent" style="font-size:13px">${sentenceHTML(para.base, h.bStart, h.bEnd, 'del')}</p>
         <div class="small muted">AI 改句</div><p class="sent" style="font-size:13px">${sentenceHTML(para.after, h.aStart, h.aEnd, 'ins')}</p>
@@ -2136,7 +2138,7 @@
     const b = e.target.closest('button');
     if (!b) return;
     const a = current();
-    if (b.dataset.insp === 'close') { ui.inspectorOpen = false; applyLayout(); renderToolbar(); clearHighlight('prov'); if (ui.mode === 'review') positionHunkBar(); requestAnimationFrame(renderGutter); return; }
+    if (b.dataset.insp === 'close') { ui.inspectorOpen = false; ui.showBar = true; applyLayout(); renderToolbar(); clearHighlight('prov'); if (ui.mode === 'review') positionHunkBar(); requestAnimationFrame(renderGutter); return; }
     if (b.dataset.tab) {
       ui.inspectorTab = b.dataset.tab;
       if (ui.inspectorTab === 'prov') computeProvSel();
