@@ -41,6 +41,19 @@
       <symbol id="i-redo" viewBox="0 0 20 20"><path d="M12.75 5l3.5 3.5-3.5 3.5"/><path d="M16 8.5H8a4.25 4.25 0 0 0 0 8.5h2.5"/></symbol>
       <symbol id="i-lock" viewBox="0 0 20 20"><rect x="4.75" y="8.75" width="10.5" height="7.5" rx="1.75"/><path d="M7.25 8.75V6.5a2.75 2.75 0 0 1 5.5 0v2.25"/></symbol>
       <symbol id="i-reset" viewBox="0 0 20 20"><path d="M4.25 10a5.75 5.75 0 1 0 1.7-4.1"/><path d="M4 3.75V6.5h2.75"/></symbol>
+      <symbol id="i-minus" viewBox="0 0 20 20"><path d="M5.5 10h9"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 20 20"><path d="M10 5.5v9M5.5 10h9"/></symbol>
+      <symbol id="i-marker" viewBox="0 0 20 20"><path d="m12.2 3.6 3.2 3.2-6.6 6.6-3.6.4.4-3.6z"/><path d="m10.6 5.2 3.2 3.2"/></symbol>
+      <symbol id="i-al-left" viewBox="0 0 20 20"><path d="M3.75 5h12.5M3.75 8.5h7.5M3.75 12h12.5M3.75 15.5h7.5"/></symbol>
+      <symbol id="i-al-center" viewBox="0 0 20 20"><path d="M3.75 5h12.5M6.25 8.5h7.5M3.75 12h12.5M6.25 15.5h7.5"/></symbol>
+      <symbol id="i-al-right" viewBox="0 0 20 20"><path d="M3.75 5h12.5M8.75 8.5h7.5M3.75 12h12.5M8.75 15.5h7.5"/></symbol>
+      <symbol id="i-al-justify" viewBox="0 0 20 20"><path d="M3.75 5h12.5M3.75 8.5h12.5M3.75 12h12.5M3.75 15.5h12.5"/></symbol>
+      <symbol id="i-lh" viewBox="0 0 20 20"><path d="M3.75 6 5.5 4.25 7.25 6M3.75 14l1.75 1.75L7.25 14M5.5 4.5v11"/><path d="M10.25 6h6M10.25 10h6M10.25 14h6"/></symbol>
+      <symbol id="i-ul" viewBox="0 0 20 20"><g fill="currentColor" stroke="none"><circle cx="4.6" cy="5.75" r="1.15"/><circle cx="4.6" cy="10" r="1.15"/><circle cx="4.6" cy="14.25" r="1.15"/></g><path d="M8.25 5.75h8.25M8.25 10h8.25M8.25 14.25h8.25"/></symbol>
+      <symbol id="i-ol" viewBox="0 0 20 20"><g stroke-width="1.2"><path d="M3.7 4.4l1.1-.55v3.4"/><path d="M3.6 9.3c.25-.45.7-.65 1.1-.65.55 0 .95.35.95.85 0 .85-2.05 1.7-2.05 2.4h2.15"/><path d="M3.65 14.05c.28-.3.65-.45 1.05-.45.55 0 .95.3.95.75s-.45.75-.95.75c.55 0 1.05.3 1.05.85s-.5.85-1.05.85c-.45 0-.85-.18-1.1-.48"/></g><path d="M8.75 5.5h7.75M8.75 10h7.75M8.75 14.75h7.75"/></symbol>
+      <symbol id="i-indent" viewBox="0 0 20 20"><path d="M9 5h7.5M9 10h7.5M9 15h7.5M3.5 7.5 6 10l-2.5 2.5"/></symbol>
+      <symbol id="i-outdent" viewBox="0 0 20 20"><path d="M9 5h7.5M9 10h7.5M9 15h7.5M6 7.5 3.5 10 6 12.5"/></symbol>
+      <symbol id="i-clear" viewBox="0 0 20 20"><path d="M4.5 4.75h8.5M8.75 4.75 6.75 15.25"/><path d="m11.75 11.25 4 4M15.75 11.25l-4 4"/></symbol>
     </defs>
   </svg>
 
@@ -76,16 +89,13 @@
           <button type="button" class="foot-btn" id="new-article">
             <svg class="icon" aria-hidden="true"><use href="#i-compose"/></svg>新建文章
           </button>
-          <button type="button" class="proto-note" id="about-btn">
-            <span class="dot" aria-hidden="true"></span>原型 · AI 为本地模拟
-          </button>
         </div>
       </aside>
       <div class="scrim" id="scrim" hidden></div>
 
       <main class="main" id="main">
         <header class="toolbar" id="toolbar"></header>
-        <div class="formatbar" id="formatbar" role="toolbar" aria-label="编辑工具" aria-controls="content" hidden></div>
+        <div class="formatbar" id="formatbar" role="toolbar" aria-label="排版" aria-controls="content" hidden></div>
         <div class="content" id="content" tabindex="-1"></div>
       </main>
 
@@ -98,6 +108,7 @@
   <div id="layer"></div>
 
   <script src="diff.js"></script>
+  <script src="rich.js"></script>
   <script src="mock-ai.js"></script>
   <script src="session.js"></script>
   <script src="samples.js"></script>
