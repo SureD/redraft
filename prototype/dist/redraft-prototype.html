@@ -15,6 +15,20 @@
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-serif: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", "Iowan Old Style", "New York", Georgia, serif;
+  --font-kai: "Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", "LXGW WenKai", var(--font-serif);
+
+  --tc-gray: #7a7a80;
+  --tc-red: #c4314b;
+  --tc-orange: #b85a00;
+  --tc-green: #1f7a4a;
+  --tc-blue: #2459d0;
+  --tc-purple: #7a3fc2;
+  --hc-yellow: rgba(255, 212, 0, 0.38);
+  --hc-green: rgba(52, 199, 89, 0.24);
+  --hc-blue: rgba(10, 132, 255, 0.2);
+  --hc-pink: rgba(255, 55, 120, 0.18);
+  --hc-purple: rgba(175, 82, 222, 0.2);
+  --quote-line: rgba(20, 20, 40, 0.16);
 
   --desktop: #dfe2ea;
   --paper: #fdfdfc;
@@ -61,7 +75,7 @@
   --sb-w: 252px;
   --insp-w: 324px;
   --bar-h: 52px;
-  --fb-h: 40px;
+  --fb-h: 42px;
   --read-size: 17px;
   --read-lh: 1.9;
   --measure: 38em;
@@ -93,6 +107,18 @@
     --del-bg: rgba(255, 100, 110, 0.13);
     --del-line: rgba(255, 141, 147, 0.6);
     --warn: #f0b45a;
+    --tc-gray: #9a9aa2;
+    --tc-red: #ff7a8a;
+    --tc-orange: #ffa04d;
+    --tc-green: #5fd197;
+    --tc-blue: #7aa7ff;
+    --tc-purple: #c39bff;
+    --hc-yellow: rgba(255, 214, 10, 0.3);
+    --hc-green: rgba(48, 209, 88, 0.24);
+    --hc-blue: rgba(64, 156, 255, 0.26);
+    --hc-pink: rgba(255, 80, 140, 0.24);
+    --hc-purple: rgba(191, 90, 242, 0.26);
+    --quote-line: rgba(255, 255, 255, 0.18);
     --mat-sidebar: rgba(38, 39, 46, 0.62);
     --mat-inspector: rgba(34, 35, 40, 0.8);
     --mat-bar: rgba(30, 30, 32, 0.72);
@@ -274,20 +300,12 @@ kbd {
 }
 .foot-btn .icon { color: var(--accent); }
 .foot-btn:hover { background: var(--fill); }
-.proto-note {
-  display: flex; align-items: center; gap: 7px;
-  border: 0; background: transparent; padding: 2px 10px; text-align: left;
-  font-size: 11.5px; color: var(--text-3);
-}
-.proto-note:hover { color: var(--text-2); }
-.proto-note .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); opacity: 0.8; }
-
 /* —— 主区域与工具栏（细材质，正文从下方滚过）—— */
 .main { grid-column: 2; grid-row: 1; position: relative; min-width: 0; background: var(--paper); display: flex; flex-direction: column; overflow: hidden; }
 .toolbar {
   position: absolute; z-index: 20; top: 0; left: 0; right: 0;
   height: var(--bar-h);
-  display: flex; align-items: center; gap: 6px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px;
   padding: 0 10px 0 12px;
   background: var(--mat-bar);
   -webkit-backdrop-filter: var(--mat-blur-thin);
@@ -298,111 +316,86 @@ kbd {
 .toolbar.scrolled { border-bottom-color: var(--sep-strong); }
 .has-fb .toolbar, .has-fb .toolbar.scrolled { border-bottom-color: transparent; }
 
-/* —— 编辑工具栏：与窗口工具栏同一种细材质，分组克制，正文滚动时始终可用 —— */
+/* —— 排版工具栏：与窗口工具栏同一种细材质；排版部分可横向滚动，右侧的 AI 标记和“更多”固定 —— */
 .formatbar {
   position: absolute; z-index: 19; top: var(--bar-h); left: 0; right: 0;
   height: var(--fb-h);
   display: flex; align-items: center; gap: 2px;
-  padding: 0 10px 0 12px;
+  padding: 0 8px 0 6px;
   background: var(--mat-bar);
   -webkit-backdrop-filter: var(--mat-blur-thin);
   backdrop-filter: var(--mat-blur-thin);
   border-top: 0.5px solid var(--sep);
   border-bottom: 0.5px solid transparent;
   transition: border-color var(--dur) var(--ease);
-  container-type: inline-size;
 }
 .formatbar[hidden] { display: none; }
 .formatbar.scrolled { border-bottom-color: var(--sep-strong); }
+.fb-scroll {
+  flex: 1 1 auto; min-width: 0; height: 100%;
+  display: flex; align-items: center; gap: 1px;
+  padding: 0 4px;
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain;
+}
+.fb-scroll::-webkit-scrollbar { display: none; }
+.fb-scroll.fade-l { -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px); mask-image: linear-gradient(90deg, transparent, #000 28px); }
+.fb-scroll.fade-r { -webkit-mask-image: linear-gradient(270deg, transparent, #000 28px); mask-image: linear-gradient(270deg, transparent, #000 28px); }
+.fb-scroll.fade-l.fade-r { -webkit-mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+.fb-end { flex: none; display: flex; align-items: center; gap: 1px; padding-left: 4px; }
 .fb-group { display: flex; align-items: center; gap: 1px; flex: none; }
 .fb-btn {
-  height: 28px; min-width: 30px; padding: 0 7px; flex: none;
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  border: 0; border-radius: 7px; background: transparent; color: var(--text-2);
+  height: 28px; min-width: 28px; padding: 0 5px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  border: 0; border-radius: 6px; background: transparent; color: var(--text-2);
   font-size: 12.5px; font-weight: 500; white-space: nowrap;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease), opacity var(--dur) var(--ease);
 }
 .fb-btn .icon { width: 17px; height: 17px; }
+.fb-btn .icon.xs { width: 10px; height: 10px; opacity: 0.6; }
 .fb-btn:hover { background: var(--fill); color: var(--text); }
 .fb-btn:active { background: var(--fill-press); }
 .fb-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); }
+.fb-btn[aria-pressed="mixed"] { background: var(--fill); color: var(--text); }
 .fb-btn[aria-expanded="true"] { background: var(--fill-press); color: var(--text); }
-.fb-btn[aria-disabled="true"] { opacity: 0.36; }
+.fb-btn[aria-disabled="true"] { opacity: 0.32; }
 .fb-btn[aria-disabled="true"]:hover, .fb-btn[aria-disabled="true"]:active { background: transparent; color: var(--text-2); }
-.fb-combo { gap: 0; border-radius: 8px; box-shadow: inset 0 0 0 0.5px var(--sep-strong); }
-.fb-combo .fb-btn { border-radius: 0; }
-.fb-combo .fb-btn:first-child { border-radius: 8px 0 0 8px; padding-left: 8px; }
-.fb-combo .fb-btn:last-child { border-radius: 0 8px 8px 0; box-shadow: inset 0.5px 0 0 var(--sep-strong); }
-.fb-combo .fb-btn[aria-pressed="true"] { box-shadow: none; }
-.fb-combo .fb-btn:focus-visible { box-shadow: var(--focus); }
-.fb-menu { gap: 4px; padding-right: 6px; }
-.fb-menu .icon.xs { opacity: 0.7; }
-.fb-menu.is-set .fb-label { color: var(--accent-text); }
-.fb-sep { width: 0.5px; height: 18px; margin: 0 6px; background: var(--sep-strong); flex: none; }
-.fb-spacer { flex: 1 1 auto; min-width: 8px; }
-.fb-status {
-  display: flex; align-items: center; gap: 10px; padding: 0 8px;
-  font-size: 11.5px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums;
-}
-.fb-status.locked { color: var(--text-2); gap: 5px; }
-.fb-marked { color: var(--accent-text); }
-.fb-aa .aa { font-family: Georgia, "Times New Roman", serif; font-size: 15px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
-.fb-more { display: none; }
-@container (max-width: 740px) { .fb-status { display: none; } }
-@container (max-width: 640px) {
-  .fb-btn.has-text:not([data-fb="mark"]) .fb-label { display: none; }
-  .fb-sep { margin: 0 3px; }
-}
-@container (max-width: 500px) {
-  .formatbar .fb-opt { display: none; }
-  .formatbar .fb-more { display: inline-flex; }
-}
-@container (max-width: 380px) {
-  .fb-btn { min-width: 28px; padding: 0 5px; }
-  .fb-sep { margin: 0 2px; }
-  .fb-aa .icon { display: none; }
-}
+.fb-menu { padding: 0 4px 0 7px; }
+.fb-val { color: var(--text); font-size: 12.5px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.w-style .fb-val { width: 3.6em; }
+.w-font .fb-val { width: 2.2em; }
+.fb-btn.w-size { min-width: 34px; padding: 0 2px; background: var(--fill); }
+.fb-btn.w-size:hover { background: var(--fill-hover); }
+.w-size .fb-val { width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
+.fb-sep { width: 0.5px; height: 18px; margin: 0 5px; background: var(--sep-strong); flex: none; }
+.g { display: inline-block; width: 1em; text-align: center; font-size: 15.5px; line-height: 1; color: inherit; }
+.g-b { font-weight: 750; }
+.g-i { font-family: Georgia, "Times New Roman", serif; font-style: italic; font-size: 17px; }
+.g-u { text-decoration: underline; text-underline-offset: 2.5px; text-decoration-thickness: 1.4px; }
+.g-s { text-decoration: line-through; text-decoration-thickness: 1.4px; }
+.g-a { font-weight: 600; font-size: 14.5px; }
+.fb-sw { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }
+.fb-sw .icon { width: 15px; height: 15px; }
+.fb-bar { display: block; width: 15px; height: 3px; border-radius: 1.5px; background: var(--bar, currentColor); box-shadow: inset 0 0 0 0.5px var(--sep-strong); }
+.fb-btn[data-fb="mark"] { color: var(--text-2); }
+.fb-btn[data-fb="mark"][aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); }
+.fb-lock { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
+.fb-lock[hidden] { display: none; }
 
 .tip {
   position: fixed; z-index: 95; pointer-events: none;
-  display: flex; flex-direction: column; gap: 2px; max-width: 260px;
-  padding: 5px 9px 6px; border-radius: 7px;
+  display: flex; align-items: baseline; gap: 10px; max-width: 260px;
+  padding: 4px 8px 5px; border-radius: 6px;
   background: var(--mat-pop);
   -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
   box-shadow: var(--shadow-pop); border: 0.5px solid var(--mat-edge);
-  font-size: 12px; line-height: 1.4; color: var(--text);
+  font-size: 12px; line-height: 1.4; color: var(--text); white-space: nowrap;
   animation: fade-in 120ms var(--ease);
 }
-.tip-main { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.tip-why { font-size: 11.5px; color: var(--text-2); }
 
-.disp-pop { width: 296px; }
-.disp { display: flex; flex-direction: column; gap: 9px; padding: 6px 6px 4px; }
-.disp-title { display: flex; flex-direction: column; gap: 1px; padding: 0 2px; font-size: 13px; font-weight: 650; }
-.disp-title span { font-size: 11.5px; font-weight: 450; color: var(--text-3); }
-.disp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 2px; }
-.disp-k { font-size: 12.5px; color: var(--text-2); }
-.disp .segmented button { min-width: 50px; justify-content: center; }
-.stepper { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--fill); }
-.stepper button { width: 36px; height: 22px; border: 0; border-radius: 6px; background: transparent; display: grid; place-items: center; color: var(--text); }
-.stepper button:hover { background: var(--fill-hover); }
-.stepper button:disabled { opacity: 0.35; }
-.stepper output { min-width: 30px; text-align: center; font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
-.a-sm { font-size: 11px; font-weight: 600; }
-.a-lg { font-size: 16px; font-weight: 600; }
-.disp-switch { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 4px; border: 0; border-radius: 8px; background: transparent; text-align: left; }
-.disp-switch:hover { background: var(--fill); }
-.disp-switch .grow { flex: 1; display: flex; flex-direction: column; gap: 1px; }
-.disp-switch .l { font-size: 13px; }
-.disp-switch .h { font-size: 11.5px; color: var(--text-3); }
-.sw { position: relative; width: 30px; height: 18px; flex: none; border-radius: 99px; background: var(--fill-press); transition: background var(--dur) var(--ease); }
-.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform var(--dur) var(--ease); }
-.disp-switch[aria-checked="true"] .sw { background: var(--accent); }
-.disp-switch[aria-checked="true"] .sw::after { transform: translateX(12px); }
-.disp-foot { display: flex; justify-content: flex-end; }
-.tb-title { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; padding: 0 6px; }
-.tb-title .t { font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tb-title .s { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-start { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tb-end { display: flex; align-items: center; justify-content: flex-end; gap: 4px; min-width: 0; }
+.tb-title { font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
+.tb-run { display: inline-flex; align-items: center; gap: 7px; padding: 0 4px 0 6px; font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
 .tb-group { display: flex; align-items: center; gap: 4px; flex: none; }
 .tb-spacer { flex: 1 1 0; }
 .icon-btn {
@@ -434,7 +427,9 @@ kbd {
 .btn.ghost { background: transparent; color: var(--accent-text); }
 .btn.ghost:hover { background: var(--accent-softer); }
 .btn.block { width: 100%; height: 34px; border-radius: 9px; font-size: 13.5px; }
-.btn .count { font-variant-numeric: tabular-nums; opacity: 0.85; }
+.btn .count { font-variant-numeric: tabular-nums; margin-left: 1px; opacity: 0.8; }
+.btn.tinted { background: var(--accent-soft); color: var(--accent-text); }
+.btn.tinted:hover { background: var(--accent-soft); filter: brightness(0.97); }
 .btn kbd { color: inherit; opacity: 0.65; }
 
 .segmented {
@@ -470,28 +465,19 @@ kbd {
 .page { max-width: calc(var(--measure) + 96px); margin: 0 auto; padding: 36px 48px 140px; position: relative; }
 
 /* —— 写作 —— */
-.banner {
-  max-width: calc(var(--measure) + 96px);
-  margin: 14px auto 0; padding: 0 48px;
-}
-.banner-inner {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 12px 10px 14px; border-radius: 10px;
-  background: var(--accent-softer); border: 0.5px solid var(--accent-line);
-  color: var(--text); font-size: 13px;
-}
-.banner-inner .grow { flex: 1; }
-.banner-inner .icon { color: var(--accent); }
 .title-input {
   display: block; width: 100%;
-  border: 0; padding: 0; margin: 0 0 6px; resize: none; overflow: hidden;
+  border: 0; padding: 0; margin: 0 0 18px; resize: none; overflow: hidden;
   background: transparent;
-  font-size: 30px; line-height: 1.3; font-weight: 680; letter-spacing: -0.015em;
+  font-size: 30px; line-height: 1.3; font-weight: 700; letter-spacing: -0.015em;
   color: var(--text);
 }
 .title-input::placeholder { color: var(--text-3); }
 .title-input:focus-visible { box-shadow: none; }
-.meta-line { font-size: 12px; color: var(--text-3); margin-bottom: 26px; font-variant-numeric: tabular-nums; display: flex; gap: 10px; flex-wrap: wrap; }
+.meta-line { font-size: 12px; color: var(--text-3); margin-bottom: 18px; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 22px; }
+.meta-line .grow { flex: 1; }
+#meta-line { justify-content: center; margin-bottom: 14px; }
+.meta-line .locked { display: inline-flex; align-items: center; gap: 4px; }
 .editor-wrap { position: relative; }
 .editor {
   font-size: var(--read-size);
@@ -504,41 +490,52 @@ kbd {
   min-height: 40vh;
   outline: none;
 }
-.editor, .title-input, .read, .r-title { font-family: var(--read-font, var(--font)); }
-.window[data-font="serif"] { --read-font: var(--font-serif); }
+.editor, .title-input, .read, .r-title { font-family: var(--font); }
 .editor:focus-visible { box-shadow: none; }
-.editor p {
-  position: relative;
-  margin: 0 0 0.85em;
-  border-radius: 10px;
-  transition: background-color var(--dur) var(--ease), padding var(--dur) var(--ease), margin var(--dur) var(--ease), color 260ms var(--ease);
-}
-.focus-mode .editor.has-current p:not(.is-current) { color: var(--text-3); }
-.no-para-ctl .g-item { display: none; }
-.editor p.is-marked {
-  background: var(--accent-softer);
-  box-shadow: inset 0 0 0 0.5px var(--accent-line);
-  margin-left: -14px; margin-right: -14px;
-  padding: 8px 14px 36px;
-}
-.editor p.is-empty::before {
+.editor p { position: relative; transition: color 260ms var(--ease); }
+.editor p.is-empty[data-placeholder]::before {
   content: attr(data-placeholder);
   position: absolute; pointer-events: none;
   color: var(--text-3);
 }
-.editor p.is-revising { animation: revising 1.6s ease-in-out infinite; }
-@keyframes revising {
-  0%, 100% { background-color: var(--accent-softer); }
-  50% { background-color: var(--accent-soft); }
-}
 .editor[contenteditable="false"] { caret-color: transparent; }
 .editor p.is-drag-source { opacity: 0.4; }
 ::selection { background: rgba(74, 86, 208, 0.22); }
+::highlight(ghost) { background-color: rgba(74, 86, 208, 0.16); }
 ::highlight(prov) { background-color: rgba(245, 190, 60, 0.32); }
 ::highlight(flash) { background-color: rgba(74, 86, 208, 0.2); }
 
+/* —— 段落样式与字符样式（写作、审阅、历史共用）—— */
+.blk { --ind: 0; margin: 0 0 0.85em calc(var(--ind) * 2em); }
+.in-1 { --ind: 1; } .in-2 { --ind: 2; } .in-3 { --ind: 3; } .in-4 { --ind: 4; } .in-5 { --ind: 5; } .in-6 { --ind: 6; }
+.t-h1 { font-size: 28px; line-height: 1.35; font-weight: 700; letter-spacing: -0.012em; margin-top: 1.15em; margin-bottom: 0.45em; }
+.t-h2 { font-size: 22px; line-height: 1.45; font-weight: 680; letter-spacing: -0.008em; margin-top: 1.25em; margin-bottom: 0.35em; }
+.t-h3 { font-size: 19px; line-height: 1.6; font-weight: 650; margin-top: 1em; margin-bottom: 0.3em; }
+.t-quote { padding-left: 1em; box-shadow: inset 3px 0 0 var(--quote-line); color: var(--text-2); }
+.t-ul, .t-ol { position: relative; padding-left: 1.65em; margin-bottom: 0.28em; }
+.t-ul:has(+ :not(.t-ul, .t-ol)), .t-ol:has(+ :not(.t-ul, .t-ol)), .t-ul:last-child, .t-ol:last-child { margin-bottom: 0.85em; }
+.t-ul::before { content: "•"; position: absolute; left: 0.42em; color: var(--text-2); }
+.t-ul.in-1::before, .t-ul.in-4::before { content: "◦"; }
+.t-ul.in-2::before, .t-ul.in-5::before { content: "▪"; font-size: 0.8em; }
+.t-ol::before { content: attr(data-num); position: absolute; left: -0.3em; width: 1.6em; padding-right: 0.35em; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.editor > .blk:first-child, .read > .blk:first-child { margin-top: 0; }
+.al-center { text-align: center; }
+.al-right { text-align: right; }
+.al-justify { text-align: justify; }
+.lh-135 { line-height: 1.35; } .lh-16 { line-height: 1.6; } .lh-19 { line-height: 1.9; } .lh-23 { line-height: 2.3; }
+.blk b { font-weight: 680; }
+.blk u { text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.f-serif { font-family: var(--font-serif); }
+.f-kai { font-family: var(--font-kai); }
+.f-mono { font-family: var(--font-mono); }
+.c-gray { color: var(--tc-gray); } .c-red { color: var(--tc-red); } .c-orange { color: var(--tc-orange); }
+.c-green { color: var(--tc-green); } .c-blue { color: var(--tc-blue); } .c-purple { color: var(--tc-purple); }
+[class*="h-"]:is(.h-yellow, .h-green, .h-blue, .h-pink, .h-purple) { border-radius: 3px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.h-yellow { background-color: var(--hc-yellow); } .h-green { background-color: var(--hc-green); } .h-blue { background-color: var(--hc-blue); }
+.h-pink { background-color: var(--hc-pink); } .h-purple { background-color: var(--hc-purple); }
+
 .gutter { position: absolute; inset: 0; pointer-events: none; }
-.g-item { position: absolute; left: -46px; width: 40px; display: flex; align-items: flex-start; justify-content: flex-end; gap: 0; pointer-events: none; }
+.g-item { position: absolute; left: -48px; width: 26px; display: flex; justify-content: flex-end; pointer-events: none; }
 .g-item > * { pointer-events: auto; }
 .g-btn {
   width: 22px; height: 26px; border: 0; padding: 0; background: transparent;
@@ -548,22 +545,15 @@ kbd {
 .g-btn:hover { background: var(--fill); color: var(--text); }
 .g-handle { cursor: grab; }
 .g-handle:active { cursor: grabbing; }
-.g-item.show .g-btn { opacity: 1; }
-.g-item.marked .g-mark { opacity: 1; color: var(--accent); }
-.g-item.marked .g-mark:hover { color: var(--accent); }
-.g-chip {
-  position: absolute;
-  display: inline-flex; align-items: center; gap: 4px;
-  height: 22px; padding: 0 8px 0 7px;
-  border: 0; border-radius: 99px;
-  background: var(--paper); color: var(--accent-text);
-  box-shadow: 0 0 0 0.5px var(--accent-line), 0 1px 2px rgba(40, 40, 120, 0.08);
-  font-size: 12px; font-weight: 550;
-  pointer-events: auto;
-}
-.g-chip:hover { background: var(--accent-soft); }
-.g-chip .icon { width: 13px; height: 13px; }
-.g-chip .state { color: var(--text-3); font-weight: 450; }
+.g-item.show .g-btn { opacity: 0.8; }
+/* 标记只是一道细竖线：不改变段落本身的版面，悬停显示修改要求，点击换要求或取消 */
+.g-bar { position: absolute; left: -21px; width: 13px; padding: 0; border: 0; border-radius: 4px; background: transparent; pointer-events: auto; cursor: pointer; }
+.g-bar::before { content: ""; position: absolute; left: 5px; top: 5px; bottom: 5px; width: 3px; border-radius: 2px; background: var(--accent); opacity: 0.7; transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.g-bar:hover::before { opacity: 1; transform: scaleX(1.35); }
+.g-bar:disabled { cursor: default; }
+.g-bar.is-wait::before { opacity: 0.3; }
+.g-bar.is-run::before { animation: revising 1.2s ease-in-out infinite; }
+@keyframes revising { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 .drop-line { position: absolute; left: -8px; right: -8px; height: 2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
 .drop-line::before { content: ""; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--accent); background: var(--paper); }
 .drag-ghost {
@@ -609,15 +599,16 @@ kbd {
 .select:hover { background-color: var(--fill-hover); }
 .read { font-size: var(--read-size); line-height: var(--read-lh); letter-spacing: 0.012em; }
 .r-title { font-size: 30px; line-height: 1.3; font-weight: 680; letter-spacing: -0.015em; margin: 0 0 6px; }
-.r-para { margin: 0 0 0.85em; white-space: pre-wrap; word-break: break-word; }
+.r-para { white-space: pre-wrap; word-break: break-word; }
+.read .blk:last-child { margin-bottom: 0.4em; }
 .r-para.context { color: var(--text-3); }
-.r-block {
-  margin: 0 -14px 1.1em; padding: 8px 14px 10px;
-  border-radius: 12px; background: var(--paper-2);
-  box-shadow: inset 0 0 0 0.5px var(--sep);
-}
-.r-block.is-current { box-shadow: inset 0 0 0 0.5px var(--accent-line); background: var(--accent-softer); }
-.r-head { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-3); margin: 0 0 2px; min-height: 24px; flex-wrap: wrap; }
+.r-block { position: relative; margin: 0 -12px 0.85em; padding: 2px 12px 1px; border-radius: 10px; transition: background var(--dur) var(--ease); }
+.r-block::before { content: ""; position: absolute; left: -9px; top: 30px; bottom: 12px; width: 3px; border-radius: 2px; background: var(--accent); opacity: 0.55; }
+.r-block.is-current { background: var(--accent-softer); }
+.r-head { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-3); margin: 0; min-height: 26px; }
+.r-bulk { display: inline-flex; gap: 2px; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.r-block:hover .r-bulk, .r-block:focus-within .r-bulk, .r-block.is-current .r-bulk { opacity: 1; }
+@media (pointer: coarse) { .r-bulk { opacity: 1; } }
 .r-head .tag { color: var(--accent-text); font-weight: 600; }
 .r-head .grow { flex: 1; }
 .r-head .link {
@@ -683,6 +674,7 @@ kbd {
 .h-row.same { color: var(--text-3); }
 .h-row.added { padding-left: 14px; box-shadow: inset 3px 0 0 var(--ins-line); }
 .h-row.removed { padding-left: 14px; box-shadow: inset 3px 0 0 var(--del-line); }
+.h-badge.fmt { color: var(--accent-text); background: var(--accent-soft); }
 .h-badge { display: inline-block; margin-right: 8px; font-size: 11px; font-weight: 600; line-height: 1; padding: 3px 6px; border-radius: 5px; vertical-align: 0.2em; color: var(--text-2); background: var(--fill); }
 .h-collapsed {
   display: flex; align-items: center; gap: 10px; margin: 0 0 0.85em; color: var(--text-3); font-size: 12px;
@@ -707,6 +699,9 @@ kbd {
 .window.no-inspector .inspector { visibility: hidden; }
 .insp-head { height: var(--bar-h); flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 16px; }
 .insp-head .t { font-size: 13px; font-weight: 650; flex: 1; }
+.insp-head .segmented { flex: 1; display: flex; }
+.insp-head .segmented button { flex: 1; justify-content: center; }
+.insp-note { font-size: 12.5px; color: var(--text-3); line-height: 1.6; margin: 10px 2px; }
 .insp-tabs { padding: 0 14px 8px; flex: none; }
 .insp-tabs .segmented { display: flex; }
 .insp-tabs .segmented button { flex: 1; justify-content: center; }
@@ -723,10 +718,11 @@ kbd {
 .card p { margin: 0; }
 .muted { color: var(--text-3); }
 .small { font-size: 12px; line-height: 1.55; }
-.lede { font-size: 12.5px; color: var(--text-2); line-height: 1.6; margin: 0 2px 12px; }
 .mark-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.mark-item { background: var(--paper); border-radius: 10px; padding: 10px 10px 10px 12px; box-shadow: 0 0 0 0.5px var(--sep-strong); }
-.mark-item.is-current { box-shadow: 0 0 0 1px var(--accent-line), 0 0 0 4px var(--accent-softer); }
+.mark-list { gap: 2px; }
+.mark-item { border-radius: 10px; padding: 8px 8px 8px 12px; position: relative; }
+.mark-item::before { content: ""; position: absolute; left: 2px; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--accent); opacity: 0.55; }
+.mark-item.is-current { background: var(--accent-softer); }
 .mark-item .excerpt {
   font-size: 12.5px; line-height: 1.6; color: var(--text);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -741,9 +737,6 @@ kbd {
   background: var(--fill); font-size: 12.5px;
 }
 .text-input:focus-visible { box-shadow: var(--focus); }
-.cur-card { display: flex; align-items: center; gap: 10px; }
-.cur-card .grow { flex: 1; min-width: 0; }
-.cur-card .ex { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .progress { height: 4px; border-radius: 99px; background: var(--fill-press); overflow: hidden; }
 .progress > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width 300ms var(--ease); }
@@ -865,7 +858,26 @@ kbd {
 .menu-item .grow { flex: 1; }
 .menu-item.danger { color: var(--del); }
 .menu-item.danger:hover, .menu-item.danger:focus-visible { background: var(--del); color: #fff; }
-.menu-item[aria-checked="true"]::after { content: "✓"; margin-left: auto; font-size: 12px; }
+.menu-item[aria-checked="true"]::after { content: "✓"; margin-left: auto; padding-left: 12px; font-size: 12px; }
+.popover.menu-narrow { min-width: 92px; max-height: min(420px, calc(100vh - 120px)); overflow: auto; }
+.menu-pop .menu-item.sty-wrap, .menu-pop .menu-item { height: auto; min-height: 30px; padding-top: 4px; padding-bottom: 4px; }
+.sty-h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.sty-h2 { font-size: 16.5px; font-weight: 680; }
+.sty-h3 { font-size: 14.5px; font-weight: 650; }
+.sty-quote { padding-left: 8px; box-shadow: inset 2px 0 0 currentColor; opacity: 0.85; }
+.popover.palette-pop { min-width: 0; padding: 8px; }
+.palette { display: grid; grid-template-columns: repeat(7, 28px); gap: 4px; }
+.menu-item.swatch { width: 28px; height: 28px; padding: 0; justify-content: center; border-radius: 50%; }
+.menu-item.swatch::before { content: ""; width: 20px; height: 20px; border-radius: 50%; background: var(--sw); box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.18); }
+.menu-item.swatch.is-none::before { background: linear-gradient(135deg, transparent 46%, var(--del) 46%, var(--del) 54%, transparent 54%), var(--paper); box-shadow: inset 0 0 0 1px var(--sep-strong); }
+.menu-item.swatch:hover, .menu-item.swatch:focus-visible { background: var(--fill-hover); }
+.menu-item.swatch:focus-visible { box-shadow: var(--focus); }
+.menu-item.swatch[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--accent); }
+.menu-item.swatch[aria-checked="true"]::after { content: none; }
+.count-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.count-table td { padding: 6px 0; border-top: 0.5px solid var(--sep); }
+.count-table tr:first-child td { border-top: 0; }
+.count-table td:last-child { text-align: right; font-weight: 600; }
 .menu-sep { height: 0.5px; background: var(--sep-strong); margin: 4px 8px; }
 .menu-label { padding: 6px 10px 3px; font-size: 11px; font-weight: 600; color: var(--text-3); }
 .pop-form { display: flex; flex-direction: column; gap: 8px; padding: 6px; }
@@ -966,19 +978,23 @@ kbd {
   .only-narrow { display: inline-flex; }
   .hide-narrow { display: none !important; }
   .page { padding: 24px 22px 140px 40px; }
-  .banner, .subbar { padding-left: 22px; padding-right: 22px; }
-  .g-item { left: -36px; width: 34px; }
+  .subbar { padding-left: 22px; padding-right: 22px; }
   .g-handle { display: none; }
   .title-input, .r-title, .ex-head h1 { font-size: 25px; }
   .segmented button { padding: 0 9px; }
   .inspector, .window.has-fb .inspector { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 62%; }
   .formatbar { padding: 0 6px 0 8px; }
   .window.no-inspector .inspector { transform: translateY(20px); }
-  .r-block, .editor p.is-marked { margin-left: -10px; margin-right: -10px; padding-left: 10px; padding-right: 10px; }
+  .r-block { margin-left: -8px; margin-right: -8px; padding-left: 8px; padding-right: 8px; }
+  .t-h1 { font-size: 25px; } .t-h2 { font-size: 20.5px; }
+}
+@media (max-width: 760px) {
+  .toolbar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; padding: 0 8px; }
+  .toolbar > .segmented { justify-self: center; }
+  .tb-end { gap: 2px; }
 }
 @media (max-width: 520px) {
   .tb-title { display: none; }
-  .toolbar .segmented { margin-left: 2px; }
 }
 @media (max-width: 420px) {
   .page { padding-left: 34px; padding-right: 16px; }
@@ -989,7 +1005,6 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
-  .editor p.is-revising { animation: none; background: var(--accent-soft); }
   .spinner { animation: none; border-top-color: var(--accent); border-right-color: var(--accent); }
 }
 @media (forced-colors: active) {
@@ -1035,6 +1050,19 @@ kbd {
       <symbol id="i-redo" viewBox="0 0 20 20"><path d="M12.75 5l3.5 3.5-3.5 3.5"/><path d="M16 8.5H8a4.25 4.25 0 0 0 0 8.5h2.5"/></symbol>
       <symbol id="i-lock" viewBox="0 0 20 20"><rect x="4.75" y="8.75" width="10.5" height="7.5" rx="1.75"/><path d="M7.25 8.75V6.5a2.75 2.75 0 0 1 5.5 0v2.25"/></symbol>
       <symbol id="i-reset" viewBox="0 0 20 20"><path d="M4.25 10a5.75 5.75 0 1 0 1.7-4.1"/><path d="M4 3.75V6.5h2.75"/></symbol>
+      <symbol id="i-minus" viewBox="0 0 20 20"><path d="M5.5 10h9"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 20 20"><path d="M10 5.5v9M5.5 10h9"/></symbol>
+      <symbol id="i-marker" viewBox="0 0 20 20"><path d="m12.2 3.6 3.2 3.2-6.6 6.6-3.6.4.4-3.6z"/><path d="m10.6 5.2 3.2 3.2"/></symbol>
+      <symbol id="i-al-left" viewBox="0 0 20 20"><path d="M3.75 5h12.5M3.75 8.5h7.5M3.75 12h12.5M3.75 15.5h7.5"/></symbol>
+      <symbol id="i-al-center" viewBox="0 0 20 20"><path d="M3.75 5h12.5M6.25 8.5h7.5M3.75 12h12.5M6.25 15.5h7.5"/></symbol>
+      <symbol id="i-al-right" viewBox="0 0 20 20"><path d="M3.75 5h12.5M8.75 8.5h7.5M3.75 12h12.5M8.75 15.5h7.5"/></symbol>
+      <symbol id="i-al-justify" viewBox="0 0 20 20"><path d="M3.75 5h12.5M3.75 8.5h12.5M3.75 12h12.5M3.75 15.5h12.5"/></symbol>
+      <symbol id="i-lh" viewBox="0 0 20 20"><path d="M3.75 6 5.5 4.25 7.25 6M3.75 14l1.75 1.75L7.25 14M5.5 4.5v11"/><path d="M10.25 6h6M10.25 10h6M10.25 14h6"/></symbol>
+      <symbol id="i-ul" viewBox="0 0 20 20"><g fill="currentColor" stroke="none"><circle cx="4.6" cy="5.75" r="1.15"/><circle cx="4.6" cy="10" r="1.15"/><circle cx="4.6" cy="14.25" r="1.15"/></g><path d="M8.25 5.75h8.25M8.25 10h8.25M8.25 14.25h8.25"/></symbol>
+      <symbol id="i-ol" viewBox="0 0 20 20"><g stroke-width="1.2"><path d="M3.7 4.4l1.1-.55v3.4"/><path d="M3.6 9.3c.25-.45.7-.65 1.1-.65.55 0 .95.35.95.85 0 .85-2.05 1.7-2.05 2.4h2.15"/><path d="M3.65 14.05c.28-.3.65-.45 1.05-.45.55 0 .95.3.95.75s-.45.75-.95.75c.55 0 1.05.3 1.05.85s-.5.85-1.05.85c-.45 0-.85-.18-1.1-.48"/></g><path d="M8.75 5.5h7.75M8.75 10h7.75M8.75 14.75h7.75"/></symbol>
+      <symbol id="i-indent" viewBox="0 0 20 20"><path d="M9 5h7.5M9 10h7.5M9 15h7.5M3.5 7.5 6 10l-2.5 2.5"/></symbol>
+      <symbol id="i-outdent" viewBox="0 0 20 20"><path d="M9 5h7.5M9 10h7.5M9 15h7.5M6 7.5 3.5 10 6 12.5"/></symbol>
+      <symbol id="i-clear" viewBox="0 0 20 20"><path d="M4.5 4.75h8.5M8.75 4.75 6.75 15.25"/><path d="m11.75 11.25 4 4M15.75 11.25l-4 4"/></symbol>
     </defs>
   </svg>
 
@@ -1070,16 +1098,13 @@ kbd {
           <button type="button" class="foot-btn" id="new-article">
             <svg class="icon" aria-hidden="true"><use href="#i-compose"/></svg>新建文章
           </button>
-          <button type="button" class="proto-note" id="about-btn">
-            <span class="dot" aria-hidden="true"></span>原型 · AI 为本地模拟
-          </button>
         </div>
       </aside>
       <div class="scrim" id="scrim" hidden></div>
 
       <main class="main" id="main">
         <header class="toolbar" id="toolbar"></header>
-        <div class="formatbar" id="formatbar" role="toolbar" aria-label="编辑工具" aria-controls="content" hidden></div>
+        <div class="formatbar" id="formatbar" role="toolbar" aria-label="排版" aria-controls="content" hidden></div>
         <div class="content" id="content" tabindex="-1"></div>
       </main>
 
@@ -1369,6 +1394,756 @@ kbd {
 </script>
   <script>
 /*
+ * Redraft 原型 · 富文本模型
+ * 段落的 text 始终是纯文本，对比、改稿、溯源和改写范例都只看它。排版是叠在上面的两层：
+ *   段落级  type（p / h1 / h2 / h3 / quote / ul / ol）、align、indent、lh
+ *   字符级  runs = [{ n, b, i, u, s, f, z, c, h }]，n 之和等于 text.length；全是默认样式时省略
+ * 文字变化时（AI 改稿、作者取舍）用同一套逐词对比把字符样式搬到新文字上，
+ * 所以排版改动不会被算成文字修改，文字修改也不会丢掉排版。
+ */
+(function (global) {
+  'use strict';
+
+  const D = global.RedraftDiff;
+
+  const BLOCKS = [
+    { id: 'p', label: '正文', size: 17, lh: 1.9 },
+    { id: 'h1', label: '标题 1', size: 28, lh: 1.35 },
+    { id: 'h2', label: '标题 2', size: 22, lh: 1.45 },
+    { id: 'h3', label: '标题 3', size: 19, lh: 1.6 },
+    { id: 'quote', label: '引用', size: 17, lh: 1.9 },
+    { id: 'ul', label: '项目符号', size: 17, lh: 1.9 },
+    { id: 'ol', label: '编号列表', size: 17, lh: 1.9 },
+  ];
+  const BLOCK = Object.fromEntries(BLOCKS.map((b) => [b.id, b]));
+  const FONTS = [
+    { id: '', label: '黑体', css: 'var(--font)', hex: '-apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif' },
+    { id: 'serif', label: '宋体', css: 'var(--font-serif)', hex: '"Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif' },
+    { id: 'kai', label: '楷体', css: 'var(--font-kai)', hex: '"Kaiti SC", "STKaiti", "KaiTi", "AR PL UKai CN", serif' },
+    { id: 'mono', label: '等宽', css: 'var(--font-mono)', hex: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace' },
+  ];
+  const SIZES = [12, 13, 14, 15, 16, 17, 18, 19, 20, 22, 24, 28, 32, 40];
+  const COLORS = [
+    { id: '', label: '默认', hex: 'inherit' },
+    { id: 'gray', label: '灰色', hex: '#7a7a80' },
+    { id: 'red', label: '红色', hex: '#c4314b' },
+    { id: 'orange', label: '橙色', hex: '#b85a00' },
+    { id: 'green', label: '绿色', hex: '#1f7a4a' },
+    { id: 'blue', label: '蓝色', hex: '#2459d0' },
+    { id: 'purple', label: '紫色', hex: '#7a3fc2' },
+  ];
+  const HIGHLIGHTS = [
+    { id: '', label: '无', hex: 'transparent' },
+    { id: 'yellow', label: '黄色', hex: 'rgba(255, 212, 0, 0.38)' },
+    { id: 'green', label: '绿色', hex: 'rgba(52, 199, 89, 0.24)' },
+    { id: 'blue', label: '蓝色', hex: 'rgba(10, 132, 255, 0.2)' },
+    { id: 'pink', label: '粉色', hex: 'rgba(255, 55, 120, 0.18)' },
+    { id: 'purple', label: '紫色', hex: 'rgba(175, 82, 222, 0.2)' },
+  ];
+  const ALIGNS = [
+    { id: 'left', label: '左对齐' },
+    { id: 'center', label: '居中' },
+    { id: 'right', label: '右对齐' },
+    { id: 'justify', label: '两端对齐' },
+  ];
+  const LINE_HEIGHTS = [1.35, 1.6, 1.9, 2.3];
+  const INDENT_MAX = 6;
+
+  const INLINE = ['b', 'i', 'u', 's', 'f', 'z', 'c', 'h'];
+  const BOOL = ['b', 'i', 'u', 's'];
+  const VALID = {
+    f: new Set(FONTS.map((x) => x.id).filter(Boolean)),
+    c: new Set(COLORS.map((x) => x.id).filter(Boolean)),
+    h: new Set(HIGHLIGHTS.map((x) => x.id).filter(Boolean)),
+  };
+
+  const escText = (s) => String(s).replace(/[&<>\u00a0]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\u00a0': '&nbsp;' }[c]));
+  const escAttr = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  /* —— 字符样式 —— */
+
+  function attrsOf(r) {
+    const o = {};
+    for (const k of INLINE) if (r && r[k]) o[k] = r[k];
+    return o;
+  }
+  const isPlain = (r) => INLINE.every((k) => !r[k]);
+  const sameAttrs = (a, b) => INLINE.every((k) => (a[k] || null) === (b[k] || null));
+  const total = (runs) => runs.reduce((n, r) => n + r.n, 0);
+
+  function validAttrs(r) {
+    const o = {};
+    for (const k of BOOL) if (r[k]) o[k] = true;
+    for (const k of ['f', 'c', 'h']) if (r[k] && VALID[k].has(r[k])) o[k] = r[k];
+    const z = Number(r.z);
+    if (z >= 8 && z <= 96) o.z = Math.round(z);
+    return o;
+  }
+
+  /** 段落的完整 runs（覆盖全文）；runs 缺失或与文字长度对不上时按无样式处理。 */
+  function runsOf(p) {
+    const n = p.text.length;
+    if (Array.isArray(p.runs) && p.runs.length && total(p.runs) === n) return p.runs.map((r) => ({ ...r }));
+    return n ? [{ n }] : [];
+  }
+
+  function normalize(runs) {
+    const out = [];
+    for (const r of runs) {
+      if (!r || !(r.n > 0)) continue;
+      const a = { n: r.n, ...attrsOf(r) };
+      const last = out[out.length - 1];
+      if (last && sameAttrs(last, a)) last.n += a.n;
+      else out.push(a);
+    }
+    return out;
+  }
+
+  function setRuns(p, runs) {
+    const r = normalize(runs);
+    if (r.length && total(r) === p.text.length && !r.every(isPlain)) p.runs = r;
+    else delete p.runs;
+    return p;
+  }
+
+  function slice(runs, s, e) {
+    const out = [];
+    let pos = 0;
+    for (const r of runs) {
+      const a = Math.max(s, pos);
+      const b = Math.min(e, pos + r.n);
+      if (b > a) out.push({ ...r, n: b - a });
+      pos += r.n;
+      if (pos >= e) break;
+    }
+    return out;
+  }
+
+  function charAttrs(runs, idx) {
+    if (!runs.length) return {};
+    let pos = 0;
+    for (const r of runs) {
+      if (idx < pos + r.n) return attrsOf(r);
+      pos += r.n;
+    }
+    return attrsOf(runs[runs.length - 1]);
+  }
+
+  /** 在 off 处新输入的文字会带上的样式：跟随前一个字，段首则跟随第一个字。 */
+  function attrsAt(p, off) {
+    return charAttrs(runsOf(p), off > 0 ? off - 1 : 0);
+  }
+
+  function cutAt(runs, off) {
+    let pos = 0;
+    for (let i = 0; i < runs.length; i++) {
+      const r = runs[i];
+      if (off > pos && off < pos + r.n) {
+        runs.splice(i, 1, { ...r, n: off - pos }, { ...r, n: pos + r.n - off });
+        return;
+      }
+      pos += r.n;
+    }
+  }
+
+  /** 对 [s, e) 应用样式变化；值为空表示恢复默认。 */
+  function patch(p, s, e, change) {
+    if (e <= s) return p;
+    const runs = runsOf(p);
+    cutAt(runs, s);
+    cutAt(runs, e);
+    let pos = 0;
+    for (const r of runs) {
+      if (pos >= s && pos + r.n <= e) {
+        for (const k of Object.keys(change)) {
+          if (change[k]) r[k] = change[k];
+          else delete r[k];
+        }
+      }
+      pos += r.n;
+    }
+    return setRuns(p, runs);
+  }
+
+  /** 在 off 处插入文字。style 可以是一组 runs，也可以是一组样式；省略时跟随 off 处的样式。 */
+  function insert(p, off, text, style) {
+    if (!text) return p;
+    const add = Array.isArray(style) && total(style) === text.length ? style.map((r) => ({ ...r })) : [{ n: text.length, ...(style && !Array.isArray(style) ? attrsOf(style) : attrsAt(p, off)) }];
+    const runs = runsOf(p);
+    cutAt(runs, off);
+    let pos = 0;
+    let i = 0;
+    while (i < runs.length && pos < off) { pos += runs[i].n; i++; }
+    runs.splice(i, 0, ...add);
+    p.text = p.text.slice(0, off) + text + p.text.slice(off);
+    return setRuns(p, runs);
+  }
+
+  function remove(p, s, e) {
+    if (e <= s) return p;
+    const runs = runsOf(p);
+    p.text = p.text.slice(0, s) + p.text.slice(e);
+    return setRuns(p, [...slice(runs, 0, s), ...slice(runs, e, total(runs))]);
+  }
+
+  /** 在 off 处截断段落，返回被切下的后半部分 { text, runs }。 */
+  function cut(p, off) {
+    const runs = runsOf(p);
+    const right = { text: p.text.slice(off), runs: normalize(slice(runs, off, total(runs))) };
+    p.text = p.text.slice(0, off);
+    setRuns(p, slice(runs, 0, off));
+    return right;
+  }
+
+  function append(p, text, runs) {
+    if (!text) return p;
+    const add = runs && total(runs) === text.length ? runs : [{ n: text.length }];
+    const base = runsOf(p);
+    p.text += text;
+    return setRuns(p, [...base, ...add]);
+  }
+
+  /** 文字从 from.text 改成 text 时搬运字符样式：相同的部分原样保留，替换的部分沿用被替换文字的样式。 */
+  function carry(from, text) {
+    const runs = runsOf(from);
+    if (!runs.length || runs.every(isPlain) || !text) return [];
+    if (from.text === text) return normalize(runs);
+    const out = [];
+    let o = 0;
+    for (const s of D.diffText(from.text, text)) {
+      if (s.type === 'eq') {
+        out.push(...slice(runs, o, o + s.text.length));
+        o += s.text.length;
+        continue;
+      }
+      const a = charAttrs(runs, s.del ? o : Math.max(0, o - 1));
+      if (s.ins) out.push({ n: s.ins.length, ...a });
+      o += s.del.length;
+    }
+    const res = normalize(out);
+    return total(res) === text.length ? res : [{ n: text.length, ...charAttrs(runs, 0) }];
+  }
+
+  /* —— 段落样式 —— */
+
+  function blockOf(p) {
+    const o = {};
+    if (p.type && p.type !== 'p' && BLOCK[p.type]) o.type = p.type;
+    if (p.align && p.align !== 'left' && ALIGNS.some((a) => a.id === p.align)) o.align = p.align;
+    const ind = Math.round(Number(p.indent) || 0);
+    if (ind > 0) o.indent = Math.min(INDENT_MAX, ind);
+    if (p.lh && LINE_HEIGHTS.includes(Number(p.lh))) o.lh = Number(p.lh);
+    return o;
+  }
+
+  function setBlock(p, change) {
+    const next = { ...blockOf(p), ...change };
+    for (const k of ['type', 'align', 'indent', 'lh']) delete p[k];
+    Object.assign(p, blockOf(next));
+    if (p.lh && p.lh === BLOCK[p.type || 'p'].lh) delete p.lh;
+    return p;
+  }
+
+  const typeOf = (p) => (p.type && BLOCK[p.type] ? p.type : 'p');
+  const defaultSize = (p) => BLOCK[typeOf(p)].size;
+  const lineHeight = (p) => p.lh || BLOCK[typeOf(p)].lh;
+
+  function clonePara(p) {
+    const q = { id: p.id, text: String(p.text ?? ''), ...blockOf(p) };
+    return setRuns(q, runsOf({ text: q.text, runs: p.runs }));
+  }
+
+  /** 读取旧数据或外部数据时使用：丢掉无效的样式，文字原样保留。 */
+  function sanitize(p) {
+    const text = typeof p.text === 'string' ? p.text : String(p.text ?? '');
+    const q = { id: p.id, text, ...blockOf(p) };
+    if (Array.isArray(p.runs)) {
+      const runs = p.runs.map((r) => ({ n: Math.max(0, Math.floor(Number(r && r.n) || 0)), ...validAttrs(r || {}) }));
+      setRuns(q, runs);
+    }
+    return q;
+  }
+
+  /** 文字换成 text，段落样式不变，字符样式按逐词对比搬运。 */
+  function retext(p, text) {
+    const q = clonePara(p);
+    q.text = text;
+    delete q.runs;
+    return setRuns(q, carry(p, text));
+  }
+
+  function sameFormat(a, b) {
+    if (!a || !b) return true;
+    return JSON.stringify(blockOf(a)) === JSON.stringify(blockOf(b))
+      && JSON.stringify(normalize(runsOf(a))) === JSON.stringify(normalize(runsOf(b)));
+  }
+
+  /* —— 编号 —— */
+
+  function roman(n) {
+    const map = [[10, 'x'], [9, 'ix'], [5, 'v'], [4, 'iv'], [1, 'i']];
+    let out = '';
+    for (const [v, s] of map) while (n >= v) { out += s; n -= v; }
+    return out;
+  }
+  function numLabel(n, level) {
+    const k = level % 3;
+    if (k === 1) return `${String.fromCharCode(97 + ((n - 1) % 26))}.`;
+    if (k === 2) return `${roman(n)}.`;
+    return `${n}.`;
+  }
+  /** 编号列表的序号：连续的编号段落按缩进层级计数，被其他段落打断后重新开始。 */
+  function numbering(paras) {
+    const map = new Map();
+    let counters = [];
+    for (const p of paras) {
+      const t = typeOf(p);
+      const lv = blockOf(p).indent || 0;
+      if (t === 'ol') {
+        counters = counters.slice(0, lv + 1);
+        counters[lv] = (counters[lv] || 0) + 1;
+        map.set(p.id, numLabel(counters[lv], lv));
+      } else if (t === 'ul') {
+        counters = counters.slice(0, lv);
+      } else {
+        counters = [];
+      }
+    }
+    return map;
+  }
+
+  /* —— 渲染 —— */
+
+  function blockClass(p) {
+    const b = blockOf(p);
+    const cls = ['blk', `t-${b.type || 'p'}`];
+    if (b.align) cls.push(`al-${b.align}`);
+    if (b.indent) cls.push(`in-${b.indent}`);
+    if (b.lh) cls.push(`lh-${String(b.lh).replace('.', '')}`);
+    return cls.join(' ');
+  }
+
+  function wrap(r, html, opts) {
+    let h = html;
+    if (r.s) h = `<s>${h}</s>`;
+    if (r.u) h = `<u>${h}</u>`;
+    if (r.i) h = `<i>${h}</i>`;
+    if (r.b) h = `<b>${h}</b>`;
+    const cls = [];
+    if (r.f) cls.push(`f-${r.f}`);
+    if (r.c && !opts.noColor) cls.push(`c-${r.c}`);
+    if (r.h && !opts.noColor) cls.push(`h-${r.h}`);
+    if (cls.length || r.z) h = `<span${cls.length ? ` class="${cls.join(' ')}"` : ''}${r.z ? ` data-z="${r.z}" style="font-size:${r.z}px"` : ''}>${h}</span>`;
+    return h;
+  }
+
+  /** 正文的规范 HTML。编辑器每次同步后都会与它比较，不一致就重绘，浏览器自行插入的样式因此不会留下。 */
+  function inlineHTML(text, runs, opts = {}) {
+    if (!text) return '';
+    const rs = runs && total(runs) === text.length ? runs : [{ n: text.length }];
+    let pos = 0;
+    let out = '';
+    for (const r of rs) {
+      out += wrap(r, escText(text.slice(pos, pos + r.n)), opts);
+      pos += r.n;
+    }
+    return out;
+  }
+
+  function sliceHTML(p, s, e, opts) {
+    return inlineHTML(p.text.slice(s, e), slice(runsOf(p), s, e), opts);
+  }
+
+  /* —— 从 DOM 读回 —— */
+
+  function ownAttrs(el, a) {
+    const o = { ...a };
+    const t = el.tagName;
+    if (t === 'B' || t === 'STRONG') o.b = true;
+    if (t === 'I' || t === 'EM') o.i = true;
+    if (t === 'U') o.u = true;
+    if (t === 'S' || t === 'STRIKE' || t === 'DEL') o.s = true;
+    if (el.classList) {
+      for (const c of el.classList) {
+        const m = /^([fch])-([a-z]+)$/.exec(c);
+        if (m && VALID[m[1]].has(m[2])) o[m[1]] = m[2];
+      }
+    }
+    const z = el.getAttribute && Number(el.getAttribute('data-z'));
+    if (z >= 8 && z <= 96) o.z = Math.round(z);
+    return o;
+  }
+
+  /** 读出一个段落元素的文字和字符样式。只认本编辑器自己的标签和类名，忽略浏览器插入的行内样式。 */
+  function parseInline(root, attrsFn = ownAttrs) {
+    let text = '';
+    const runs = [];
+    const walk = (node, a) => {
+      for (const ch of node.childNodes) {
+        if (ch.nodeType === 3) {
+          const t = ch.data.replace(/\u200b/g, '');
+          if (t) { text += t; runs.push({ n: t.length, ...a }); }
+        } else if (ch.nodeType === 1 && ch.tagName !== 'BR') {
+          walk(ch, attrsFn(ch, a));
+        }
+      }
+    };
+    walk(root, {});
+    return { text, runs: normalize(runs) };
+  }
+
+  /* —— 剪贴板 —— */
+
+  function foreignAttrs(el, a) {
+    const o = { ...a };
+    const t = el.tagName;
+    const st = el.style || {};
+    if (t === 'B' || t === 'STRONG') o.b = true;
+    if (t === 'I' || t === 'EM' || t === 'CITE') o.i = true;
+    if (t === 'U' || t === 'INS') o.u = true;
+    if (t === 'S' || t === 'STRIKE' || t === 'DEL') o.s = true;
+    const w = st.fontWeight;
+    if (w) {
+      if (w === 'bold' || w === 'bolder' || Number(w) >= 600) o.b = true;
+      else if (w === 'normal' || Number(w) <= 500) delete o.b;
+    }
+    if (st.fontStyle === 'italic') o.i = true;
+    else if (st.fontStyle === 'normal') delete o.i;
+    const deco = `${st.textDecoration || ''} ${st.textDecorationLine || ''}`;
+    if (/underline/.test(deco)) o.u = true;
+    if (/line-through/.test(deco)) o.s = true;
+    return o;
+  }
+
+  function trimBlock(b) {
+    const lead = b.text.length - b.text.replace(/^\s+/, '').length;
+    const tail = b.text.length - b.text.replace(/\s+$/, '').length;
+    if (!lead && !tail) return b;
+    const end = b.text.length - tail;
+    return { ...b, text: b.text.slice(lead, Math.max(lead, end)), runs: normalize(slice(b.runs, lead, Math.max(lead, end))) };
+  }
+
+  const BLOCK_TAGS = /^(P|DIV|H[1-6]|LI|BLOCKQUOTE|PRE|TR|SECTION|ARTICLE|HEADER|FOOTER|UL|OL|TABLE|TBODY|THEAD|DL|DT|DD|FIGURE|FIGCAPTION|ADDRESS|ASIDE|MAIN|NAV|HR)$/;
+  const SKIP_TAGS = /^(STYLE|SCRIPT|META|TITLE|HEAD|NOSCRIPT|TEMPLATE|LINK|IMG|SVG|VIDEO|AUDIO|IFRAME|OBJECT|CANVAS|BUTTON|INPUT|SELECT|TEXTAREA)$/;
+
+  function blockInfo(el, parent) {
+    const t = el.tagName;
+    const info = { type: parent.type === 'quote' ? 'quote' : 'p', indent: parent.indent || 0 };
+    if (t === 'H1') info.type = 'h1';
+    else if (t === 'H2') info.type = 'h2';
+    else if (/^H[3-6]$/.test(t)) info.type = 'h3';
+    else if (t === 'BLOCKQUOTE') info.type = 'quote';
+    else if (t === 'LI') {
+      const list = el.parentElement && el.parentElement.closest('ol, ul');
+      info.type = list && list.tagName === 'OL' ? 'ol' : 'ul';
+      let depth = 0;
+      for (let n = el.parentElement; n; n = n.parentElement) if (n.tagName === 'OL' || n.tagName === 'UL') depth++;
+      info.indent = Math.min(INDENT_MAX, Math.max(0, depth - 1));
+    }
+    const al = (el.style && el.style.textAlign) || el.getAttribute('align');
+    if (al && ['center', 'right', 'justify'].includes(al)) info.align = al;
+    else if (parent.align) info.align = parent.align;
+    return info;
+  }
+
+  /**
+   * 把剪贴板 HTML 读成段落。本编辑器复制出的内容带 data-rd-block，段落和字符样式完整还原；
+   * 其他来源只保留粗体、斜体、下划线、删除线、标题、列表和引用，不带入外部的字体、颜色和字号。
+   */
+  function fromHTML(html) {
+    if (!html || typeof DOMParser === 'undefined') return [];
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const own = doc.querySelectorAll('[data-rd-block]');
+    if (own.length) {
+      return Array.from(own).map((el) => {
+        const { text, runs } = parseInline(el);
+        const b = blockOf({ type: el.dataset.type, align: el.dataset.align, indent: el.dataset.indent, lh: el.dataset.lh });
+        return { text, runs, ...b };
+      });
+    }
+    const blocks = [];
+    let cur = null;
+    const walk = (node, a, info) => {
+      for (const ch of node.childNodes) {
+        if (ch.nodeType === 3) {
+          const t = ch.data.replace(/[\s\u00a0]+/g, ' ');
+          if (!t || (t === ' ' && (!cur || !cur.text))) continue;
+          if (!cur) { cur = { text: '', runs: [], ...info }; blocks.push(cur); }
+          cur.text += t;
+          cur.runs.push({ n: t.length, ...a });
+          continue;
+        }
+        if (ch.nodeType !== 1 || SKIP_TAGS.test(ch.tagName)) continue;
+        if (ch.tagName === 'BR') { cur = null; continue; }
+        if (BLOCK_TAGS.test(ch.tagName)) {
+          cur = null;
+          walk(ch, foreignAttrs(ch, a), blockInfo(ch, info));
+          cur = null;
+        } else {
+          walk(ch, foreignAttrs(ch, a), info);
+        }
+      }
+    };
+    walk(doc.body, {}, { type: 'p', indent: 0 });
+    return blocks
+      .map((b) => trimBlock({ ...b, runs: normalize(b.runs) }))
+      .filter((b) => b.text)
+      .map((b) => ({ text: b.text, runs: b.runs.map(validAttrs).map((x, i) => ({ n: b.runs[i].n, ...x })), ...blockOf(b) }));
+  }
+
+  function fromPlain(text) {
+    return String(text || '').replace(/\r\n?/g, '\n').split('\n')
+      .map((l) => l.replace(/\t/g, ' '))
+      .filter((l) => l.trim())
+      .map((l) => ({ text: l, runs: [] }));
+  }
+
+  /* —— 导出 —— */
+
+  function styleAttr(parts) {
+    const s = parts.filter(Boolean).join(';');
+    return s ? ` style="${escAttr(s)}"` : '';
+  }
+
+  function exportInline(text, runs, opts) {
+    if (!text) return '';
+    const rs = runs && total(runs) === text.length ? runs : [{ n: text.length }];
+    let pos = 0;
+    let out = '';
+    for (const r of rs) {
+      let h = escText(text.slice(pos, pos + r.n));
+      pos += r.n;
+      if (r.s) h = `<s>${h}</s>`;
+      if (r.u) h = `<u>${h}</u>`;
+      if (r.i) h = `<em>${h}</em>`;
+      if (r.b) h = `<strong>${h}</strong>`;
+      if (r.f || r.c || r.h || r.z) {
+        const cls = [r.f && `f-${r.f}`, r.c && `c-${r.c}`, r.h && `h-${r.h}`].filter(Boolean).join(' ');
+        const css = [
+          r.f && `font-family:${FONTS.find((x) => x.id === r.f).hex}`,
+          r.c && `color:${COLORS.find((x) => x.id === r.c).hex}`,
+          r.h && `background-color:${HIGHLIGHTS.find((x) => x.id === r.h).hex}`,
+          r.z && `font-size:${r.z}px`,
+        ];
+        h = `<span${opts.data && cls ? ` class="${cls}"` : ''}${opts.data && r.z ? ` data-z="${r.z}"` : ''}${styleAttr(css)}>${h}</span>`;
+      }
+      out += h;
+    }
+    return out;
+  }
+
+  /** 语义化的 HTML 正文：列表合并成 ul / ol，对齐、缩进、行距写成行内样式，其他软件也能读懂。 */
+  function bodyHTML(paras, opts = {}) {
+    const out = [];
+    let list = null;
+    const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+    for (const p of paras) {
+      const b = blockOf(p);
+      const type = b.type || 'p';
+      const isList = type === 'ul' || type === 'ol';
+      if (!isList || list !== type) close();
+      if (!opts.data && !isList && !p.text.trim()) continue;
+      if (isList && !list) { out.push(`<${type}>`); list = type; }
+      const tag = { p: 'p', h1: 'h1', h2: 'h2', h3: 'h3', quote: 'blockquote', ul: 'li', ol: 'li' }[type];
+      const css = [
+        b.align && `text-align:${b.align}`,
+        b.indent && `margin-left:${b.indent * 2}em`,
+        b.lh && `line-height:${b.lh}`,
+      ];
+      const data = opts.data
+        ? ` data-rd-block="1"${b.type ? ` data-type="${b.type}"` : ''}${b.align ? ` data-align="${b.align}"` : ''}${b.indent ? ` data-indent="${b.indent}"` : ''}${b.lh ? ` data-lh="${b.lh}"` : ''}`
+        : '';
+      out.push(`<${tag}${data}${styleAttr(css)}>${exportInline(p.text, p.runs, opts) || (opts.data ? '<br>' : '')}</${tag}>`);
+    }
+    close();
+    return out.join('\n');
+  }
+
+  function clipboardHTML(blocks) {
+    return `<div data-redraft="1">${bodyHTML(blocks.map((b, i) => ({ id: `c${i}`, ...b })), { data: true })}</div>`;
+  }
+
+  function htmlDocument(title, paras) {
+    const t = escText(title || '无标题');
+    return `<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${t}</title>
+<style>
+  body { margin: 0; background: #fdfdfc; color: #1d1d1f; font: 17px/1.9 ${FONTS[0].hex}; }
+  main { max-width: 38em; margin: 0 auto; padding: 56px 24px 96px; }
+  .doc-title { font-size: 30px; line-height: 1.3; margin: 0 0 28px; }
+  p, li { margin: 0 0 0.85em; }
+  h1 { font-size: 28px; line-height: 1.35; margin: 1.2em 0 0.45em; }
+  h2 { font-size: 22px; line-height: 1.45; margin: 1.15em 0 0.4em; }
+  h3 { font-size: 19px; line-height: 1.6; margin: 1em 0 0.35em; }
+  blockquote { margin: 0 0 0.85em; padding-left: 1em; border-left: 3px solid #d5d5da; color: #5f5f66; }
+  ul, ol { margin: 0 0 0.85em; padding-left: 1.6em; }
+  li { margin-bottom: 0.3em; }
+  @media (prefers-color-scheme: dark) { body { background: #1e1e20; color: #ececef; } blockquote { border-color: #44444a; color: #a7a7ae; } }
+</style>
+</head>
+<body>
+<main>
+<h1 class="doc-title">${t}</h1>
+${bodyHTML(paras)}
+</main>
+</body>
+</html>
+`;
+  }
+
+  function mdEsc(s) {
+    return s.replace(/([\\`*_~[\]<>])/g, '\\$1');
+  }
+  function mdInline(text, runs) {
+    const rs = normalize(runsOf({ text, runs }).map((r) => ({ n: r.n, b: r.b, i: r.i, s: r.s })));
+    let pos = 0;
+    let out = '';
+    for (const r of rs) {
+      const t = mdEsc(text.slice(pos, pos + r.n));
+      pos += r.n;
+      const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(t);
+      let core = m[2];
+      if (!core || (!r.b && !r.i && !r.s)) { out += t; continue; }
+      if (r.s) core = `~~${core}~~`;
+      if (r.i) core = `*${core}*`;
+      if (r.b) core = `**${core}**`;
+      out += m[1] + core + m[3];
+    }
+    return out;
+  }
+
+  /** Markdown 只保留它能表达的：标题、引用、列表、粗体、斜体、删除线。 */
+  function toMarkdown(title, paras) {
+    const nums = numbering(paras);
+    const lines = [`# ${title || '无标题'}`];
+    let prevList = false;
+    for (const p of paras) {
+      if (!p.text.trim()) { prevList = false; continue; }
+      const b = blockOf(p);
+      const type = b.type || 'p';
+      let body = mdInline(p.text, p.runs);
+      const isList = type === 'ul' || type === 'ol';
+      if (type === 'p' && /^(#{1,6}\s|>|[-+*]\s|\d+[.)]\s)/.test(body)) body = `\\${body}`;
+      let line;
+      if (type === 'h1') line = `## ${body}`;
+      else if (type === 'h2') line = `### ${body}`;
+      else if (type === 'h3') line = `#### ${body}`;
+      else if (type === 'quote') line = `> ${body}`;
+      else if (type === 'ul') line = `${'  '.repeat(b.indent || 0)}- ${body}`;
+      else if (type === 'ol') line = `${'   '.repeat(b.indent || 0)}${/^\d/.test(nums.get(p.id)) ? nums.get(p.id) : '1.'} ${body}`;
+      else line = body;
+      lines.push(isList && prevList ? `\n${line}` : `\n\n${line}`);
+      prevList = isList;
+    }
+    return `${lines.join('').replace(/^\n+/, '')}\n`;
+  }
+
+  /* —— 选区的排版状态 —— */
+
+  const MIXED = null;
+
+  function uniform(values) {
+    const set = new Set(values);
+    return set.size === 1 ? values[0] : MIXED;
+  }
+
+  /**
+   * 选区（或光标处）的排版状态。布尔样式返回 true / false / 'mixed'；
+   * 其余返回统一的值，不统一时返回 null。光标处有待用样式（pending）时以它为准。
+   */
+  function selectionState(paras, c, pending) {
+    const i1 = paras.findIndex((p) => p.id === c.pid);
+    let i2 = paras.findIndex((p) => p.id === (c.endPid || c.pid));
+    if (i1 < 0) return null;
+    if (i2 < i1) i2 = i1;
+    let blocks = paras.slice(i1, i2 + 1);
+    if (blocks.length > 1 && !c.collapsed && c.endOffset === 0) blocks = blocks.slice(0, -1);
+    const chars = [];
+    if (!c.collapsed) {
+      blocks.forEach((p, k) => {
+        const s = k === 0 ? c.offset : 0;
+        const e = paras.indexOf(p) === i2 ? c.endOffset : p.text.length;
+        for (const r of slice(runsOf(p), s, e)) chars.push({ r, p });
+      });
+    }
+    if (!chars.length) {
+      const p = paras[i1];
+      const a = { ...attrsAt(p, c.offset) };
+      if (pending) for (const k of Object.keys(pending)) { if (pending[k]) a[k] = pending[k]; else delete a[k]; }
+      chars.push({ r: { n: 1, ...a }, p });
+    }
+    const st = {};
+    for (const k of BOOL) {
+      const on = chars.filter((x) => x.r[k]).length;
+      st[k] = on === chars.length ? true : on === 0 ? false : 'mixed';
+    }
+    st.f = uniform(chars.map((x) => x.r.f || ''));
+    st.c = uniform(chars.map((x) => x.r.c || ''));
+    st.h = uniform(chars.map((x) => x.r.h || ''));
+    st.z = uniform(chars.map((x) => x.r.z || defaultSize(x.p)));
+    st.type = uniform(blocks.map(typeOf));
+    st.align = uniform(blocks.map((p) => p.align || 'left'));
+    st.lh = uniform(blocks.map(lineHeight));
+    st.indentMin = Math.min(...blocks.map((p) => blockOf(p).indent || 0));
+    st.indentMax = Math.max(...blocks.map((p) => blockOf(p).indent || 0));
+    st.blocks = blocks.map((p) => p.id);
+    return st;
+  }
+
+  global.RedraftRich = {
+    BLOCKS,
+    BLOCK,
+    FONTS,
+    SIZES,
+    COLORS,
+    HIGHLIGHTS,
+    ALIGNS,
+    LINE_HEIGHTS,
+    INDENT_MAX,
+    INLINE,
+    attrsOf,
+    runsOf,
+    normalize,
+    setRuns,
+    slice,
+    charAttrs,
+    attrsAt,
+    patch,
+    insert,
+    remove,
+    cut,
+    append,
+    carry,
+    blockOf,
+    setBlock,
+    typeOf,
+    defaultSize,
+    lineHeight,
+    clonePara,
+    sanitize,
+    retext,
+    sameFormat,
+    numbering,
+    blockClass,
+    inlineHTML,
+    sliceHTML,
+    parseInline,
+    fromHTML,
+    fromPlain,
+    clipboardHTML,
+    bodyHTML,
+    htmlDocument,
+    toMarkdown,
+    selectionState,
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+  <script>
+/*
  * Redraft 原型 · 模拟 AI 改稿服务
  * 对应 design.md 中「AI 改稿服务」：接收作者标记的段落和要求，返回改写文本与逐处说明。
  * 这里没有任何网络请求：示例段落使用预置改法；作者新写的段落使用一组本地规则（删赘词、精简说法）。
@@ -1385,6 +2160,34 @@ kbd {
 
   /** 预置改法：按段落原文精确匹配，notes 用于给每一处修改配上说明。 */
   const PRESETS = {
+    // —— 写日记的第一百天 · 当前稿 ——
+    '去年冬天，我发现自己已经记不清上个月都做过一些什么事情了。日子一天一天地过去，好像什么都没有留下来。我想给自己留一点证据，证明这些日子我真的认真活过。': {
+      text: '去年冬天，我发现自己记不清上个月做过什么。日子一天天过去，好像什么都没留下。我想给自己留一点证据，证明这些日子我真的认真活过。',
+      notes: [
+        { del: '已经', reason: '“已经”“都”“一些”只起填充作用，删去后句子更轻。', tag: '赘词' },
+        { del: '都', reason: '“已经”“都”“一些”只起填充作用，删去后句子更轻。', tag: '赘词' },
+        { del: '一些什么事情了', reason: '“做过一些什么事情了”压成“做过什么”，意思不变。', tag: '赘词' },
+        { ins: '什么', reason: '“做过一些什么事情了”压成“做过什么”，意思不变。', tag: '赘词' },
+        { ins: '一天天', reason: '“一天一天地”压成“一天天”，节奏更紧。', tag: '节奏' },
+        { del: '一天一天地', reason: '“一天一天地”压成“一天天”，节奏更紧。', tag: '节奏' },
+        { del: '有', reason: '“没有留下来”可以只说“没留下”。', tag: '赘词' },
+        { del: '来', reason: '“留下”已经完整，“来”可以省。', tag: '赘词' },
+      ],
+    },
+    '我发现我其实是一个非常非常容易被小事打动的人，比如楼下面包店每天早上七点准时飘出来的那种香味，还有地铁上一个陌生人很认真地给我让了座。': {
+      text: '我发现自己很容易被小事打动：楼下面包店每天七点准时飘出的香味，地铁上一个陌生人认真地给我让座。',
+      notes: [
+        { ins: '自己', reason: '“我发现我”两个“我”挨在一起，第二个换成“自己”。', tag: '重复' },
+        { del: '其实是一个非常非常', reason: '“其实”和叠用的“非常”都在加强语气，叠在一起显得用力；让后面的小事自己说话。', tag: '赘词' },
+        { ins: '：', reason: '用冒号直接引出例子，代替“的人，比如”。', tag: '节奏' },
+        { del: '比如', reason: '用冒号直接引出例子，代替“的人，比如”。', tag: '节奏' },
+        { del: '早上', reason: '“七点”配上面包香，已经是早上。', tag: '赘词' },
+        { del: '来的那种', reason: '“飘出来的那种香味”压成“飘出的香味”。', tag: '赘词' },
+        { del: '还有', reason: '两个例子并列，用逗号就够了。', tag: '衔接' },
+        { del: '很', reason: '“认真地”本身就有分量，“很”可以省。', tag: '赘词' },
+        { del: '了', reason: '“让座”是一个完整的动作，“了”可以省。', tag: '赘词' },
+      ],
+    },
     // —— 雨季的旧书店 · 第 1 轮 ——
     '那天雨下得很大，我没带伞，就躲进了书店。店里的灯光是那种很暗的黄色，空气里有一股纸张受潮之后的味道。': {
       text: '那天雨下得很大，我没带伞，躲进了书店。店里亮着昏黄的灯，空气里是纸张受潮的气味。',
@@ -1609,10 +2412,11 @@ kbd {
 
   const D = global.RedraftDiff;
   const AI = global.RedraftMockAI;
+  const R = global.RedraftRich;
 
   const uid = (prefix) => `${prefix}${Date.now().toString(36).slice(-4)}${Math.random().toString(36).slice(2, 7)}`;
   const clone = (x) => JSON.parse(JSON.stringify(x));
-  const snapshot = (paras) => paras.map((p) => ({ id: p.id, text: p.text }));
+  const snapshot = (paras) => paras.map(R.clonePara);
 
   function instructionLabel(mark) {
     if (!mark) return '';
@@ -1656,15 +2460,15 @@ kbd {
     return round;
   }
 
-  /** AI 改完所有标记段落后，生成一份新版本。 */
+  /** AI 改完所有标记段落后，生成一份新版本。AI 只改文字，段落样式不变，字符样式随文字搬运。 */
   function completeRound(article, round, results, now) {
     const submitted = getVersion(article, round.submittedId);
     const aiParas = submitted.paragraphs.map((p) => {
       const r = results[p.id];
-      if (!r) return { id: p.id, text: p.text };
+      if (!r) return R.clonePara(p);
       round.paras[p.id].source = r.source;
       round.paras[p.id].notes = r.notes;
-      return { id: p.id, text: r.text };
+      return R.retext(p, r.text);
     });
     const ai = { id: uid('v'), kind: 'ai', round: round.n, at: now, title: article.title, paragraphs: aiParas };
     article.versions.push(ai);
@@ -1682,14 +2486,15 @@ kbd {
   function reviewModel(article, round) {
     const submitted = getVersion(article, round.submittedId);
     const ai = getVersion(article, round.aiId);
-    const aiText = new Map(ai.paragraphs.map((p) => [p.id, p.text]));
+    const aiParas = new Map(ai.paragraphs.map((p) => [p.id, p]));
     let total = 0;
     let decided = 0;
     const counts = { adopt: 0, keep: 0, rewrite: 0 };
     const paras = submitted.paragraphs.map((p, index) => {
       const meta = round.paras[p.id];
-      if (!meta) return { id: p.id, index, marked: false, base: p.text };
-      const after = aiText.get(p.id) ?? p.text;
+      if (!meta) return { id: p.id, index, marked: false, base: p.text, src: p };
+      const aiSrc = aiParas.get(p.id) || p;
+      const after = aiSrc.text;
       const segments = D.diffText(p.text, after);
       const hunks = [];
       let bPos = 0;
@@ -1706,7 +2511,7 @@ kbd {
         total++;
         if (decision) { decided++; counts[decision.choice]++; }
       });
-      return { id: p.id, index, marked: true, base: p.text, after, segments, hunks, meta };
+      return { id: p.id, index, marked: true, base: p.text, after, segments, hunks, meta, src: p, aiSrc };
     });
     return { paras, total, decided, counts, submitted, ai };
   }
@@ -1731,12 +2536,12 @@ kbd {
     const finalParas = [];
     const records = [];
     for (const para of model.paras) {
-      if (!para.marked) { finalParas.push({ id: para.id, text: para.base }); continue; }
+      if (!para.marked) { finalParas.push(R.clonePara(para.src)); continue; }
       for (const h of para.hunks) {
         if (!round.decisions[h.key]) round.decisions[h.key] = { choice: fallback || 'keep', auto: true };
       }
       const { text, spans } = composeParagraph(para, round.decisions, null);
-      finalParas.push({ id: para.id, text });
+      finalParas.push(R.retext(para.src, text));
       for (const h of para.hunks) {
         const d = round.decisions[h.key];
         const span = spans[h.key];
@@ -1815,8 +2620,11 @@ kbd {
   }
 
   function toMarkdown(article) {
-    const body = article.paragraphs.map((p) => p.text).filter((t) => t.trim()).join('\n\n');
-    return `# ${article.title || '无标题'}\n\n${body}\n`;
+    return R.toMarkdown(article.title, article.paragraphs);
+  }
+
+  function toHTML(article) {
+    return R.htmlDocument(article.title, article.paragraphs);
   }
 
   global.RedraftSession = {
@@ -1836,6 +2644,7 @@ kbd {
     provenance,
     allRecords,
     toMarkdown,
+    toHTML,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
@@ -1850,6 +2659,7 @@ kbd {
 
   const S = global.RedraftSession;
   const AI = global.RedraftMockAI;
+  const R = global.RedraftRich;
   const t = (iso) => new Date(iso).getTime();
 
   function article(id, title, createdAt, paragraphs) {
@@ -1863,6 +2673,53 @@ kbd {
       versions: [],
       rounds: [],
     };
+  }
+
+  /** 带排版的段落：spans 里的每一项是 [要加样式的那段文字, 字符样式]，按出现位置换算成 runs。 */
+  function rich(pid, text, block = {}, spans = []) {
+    const p = { id: pid, text, ...block };
+    for (const [part, attrs] of spans) {
+      const at = text.indexOf(part);
+      if (at >= 0) R.patch(p, at, at + part.length, attrs);
+    }
+    return p;
+  }
+
+  function diary() {
+    const at = t('2026-11-11T07:40:00+08:00');
+    const paras = [
+      rich('d1', '今天是我开始写日记的第一百天。说实话，我原本以为自己坚持不过一周。', {}, [['坚持不过一周', { b: true }]]),
+      rich('d2', '为什么开始', { type: 'h2' }),
+      rich('d3', '去年冬天，我发现自己已经记不清上个月都做过一些什么事情了。日子一天一天地过去，好像什么都没有留下来。我想给自己留一点证据，证明这些日子我真的认真活过。', {}, [['证据', { h: 'yellow' }]]),
+      rich('d4', '写作不是记录生活，而是把生活再过一遍。', { type: 'quote' }, [['把生活再过一遍', { f: 'kai' }]]),
+      rich('d5', '我给自己定的三条规矩', { type: 'h2' }),
+      rich('d6', '每天只写一页，写不满也没关系。', { type: 'ol' }, [['一页', { b: true }]]),
+      rich('d7', '不写“今天很开心”，只写让我开心的那件事。', { type: 'ol' }, [['那件事', { u: true }]]),
+      rich('d8', '写完不改，第二天早上再读一遍。', { type: 'ol' }, [['第二天早上', { i: true }]]),
+      rich('d9', '一百天之后', { type: 'h2' }),
+      rich('d10', '我发现我其实是一个非常非常容易被小事打动的人，比如楼下面包店每天早上七点准时飘出来的那种香味，还有地铁上一个陌生人很认真地给我让了座。', {}, [['容易被小事打动', { b: true }]]),
+      rich('d11', '读完的书：12 本', { type: 'ul' }),
+      rich('d12', '用完的笔芯：7 支', { type: 'ul' }),
+      rich('d13', '想认真道谢的人：很多', { type: 'ul' }, [['很多', { c: 'orange', b: true }]]),
+      rich('d14', '—— 写于第一百天的夜里', { align: 'right' }, [['—— 写于第一百天的夜里', { i: true, c: 'gray' }]]),
+    ];
+    const a = {
+      id: 'art-diary',
+      title: '写日记的第一百天',
+      createdAt: t('2026-11-10T23:05:00+08:00'),
+      updatedAt: at,
+      paragraphs: paras,
+      marks: {},
+      versions: [],
+      rounds: [],
+    };
+    // 初稿只有文字；当前稿是排好版的同一篇。历史里对照两稿时，只会看到“格式”标签，文字修改为零。
+    a.versions.push({
+      id: 'v-diary-1', kind: 'snapshot', name: '初稿', at: a.createdAt, title: a.title,
+      paragraphs: paras.map((p) => ({ id: p.id, text: p.text })),
+    });
+    a.marks = { d3: { instruction: 'concise' }, d10: { instruction: 'concise' } };
+    return a;
   }
 
   function runRound(a, marks, at, decide) {
@@ -1943,14 +2800,15 @@ kbd {
       ['c3', 'Now I only write one page a day. It is usually about something I noticed, not something I did.'],
     ]);
 
+    const day = diary();
     return {
-      schema: 3,
-      articles: [letter, shop, notebook],
-      currentId: shop.id,
+      schema: 4,
+      articles: [day, letter, shop, notebook],
+      currentId: day.id,
     };
   }
 
-  global.RedraftSamples = { build };
+  global.RedraftSamples = { build, diary };
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
   <script>
@@ -1964,6 +2822,7 @@ kbd {
   const D = window.RedraftDiff;
   const AI = window.RedraftMockAI;
   const S = window.RedraftSession;
+  const R = window.RedraftRich;
 
   const STORAGE_KEY = 'redraft.prototype.v1';
   const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
@@ -2000,14 +2859,41 @@ kbd {
 
   /* ───────────────────────── 数据与持久化 ───────────────────────── */
 
+  /*
+   * 第 3 版数据是纯文本段落，原样可用：逐段清理无效的排版字段后升到第 4 版，文字和历史一律保留。
+   * 升级时如果文库里还没有带排版的示例文章，就补上这一篇，其余文章不动。
+   * 认不出的数据不会被覆盖：先另存一份备份，再从示例数据开始。
+   */
+  function migrate(d) {
+    if (!d || !Array.isArray(d.articles) || (d.schema !== 3 && d.schema !== 4)) return null;
+    for (const a of d.articles) {
+      a.paragraphs = (a.paragraphs || []).map(R.sanitize);
+      if (!a.paragraphs.length) a.paragraphs = [{ id: S.uid('p'), text: '' }];
+      for (const v of a.versions || []) v.paragraphs = (v.paragraphs || []).map(R.sanitize);
+      a.marks = a.marks || {};
+      a.versions = a.versions || [];
+      a.rounds = a.rounds || [];
+    }
+    if (d.schema === 3 && !d.articles.some((a) => a.id === 'art-diary')) {
+      const diary = window.RedraftSamples.diary();
+      d.articles.unshift(diary);
+      d.currentId = diary.id;
+    }
+    d.schema = 4;
+    if (d.prefs) delete d.prefs.display;
+    return d;
+  }
+
   function load() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.schema === 3 && Array.isArray(parsed.articles)) return parsed;
-      }
-    } catch (_) { /* 存储不可用时退回示例数据 */ }
+    let raw = null;
+    try { raw = localStorage.getItem(STORAGE_KEY); } catch (_) { /* 存储不可用 */ }
+    if (raw) {
+      try {
+        const m = migrate(JSON.parse(raw));
+        if (m) return m;
+      } catch (_) { /* 解析失败时走下面的备份 */ }
+      try { localStorage.setItem(`${STORAGE_KEY}.backup-${Date.now()}`, raw); } catch (_) { /* 忽略 */ }
+    }
     return window.RedraftSamples.build();
   }
 
@@ -2016,7 +2902,7 @@ kbd {
   function save() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, prefs: { diffLayout: ui.diffLayout, display } })); } catch (_) { /* 忽略 */ }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, prefs: { diffLayout: ui.diffLayout } })); } catch (_) { /* 忽略 */ }
     }, 250);
   }
 
@@ -2024,7 +2910,7 @@ kbd {
     view: 'article',
     mode: 'write',
     sidebarOpen: !mqNarrow.matches,
-    inspectorOpen: !mqMid.matches,
+    inspectorOpen: false,
     inspectorTab: 'marks',
     diffLayout: (data.prefs && data.prefs.diffLayout) || 'inline',
     focusKey: null,
@@ -2041,14 +2927,6 @@ kbd {
     hoverPid: null,
     provSel: null,
   };
-
-  /* 显示设置只改变阅读面，不进入文档模型，也不参与对比和溯源。 */
-  const DISPLAY_DEFAULT = { font: 'sans', size: 17, leading: 'normal', measure: 'normal', focus: false, gutter: true };
-  const display = { ...DISPLAY_DEFAULT, ...((data.prefs && data.prefs.display) || {}) };
-  const LEADING = { tight: 1.7, normal: 1.9, loose: 2.15 };
-  const MEASURE = { narrow: '32em', normal: '38em', wide: '46em' };
-  const SIZE_MIN = 14;
-  const SIZE_MAX = 22;
 
   const current = () => data.articles.find((a) => a.id === data.currentId) || null;
   const isLocked = (a) => Boolean(a && S.activeRound(a));
@@ -2105,21 +2983,29 @@ kbd {
     ui.focusKey = entry.focusKey;
     save();
     renderAll();
-    if (ui.mode === 'write' && entry.caret) setCaret(entry.caret.pid, entry.caret.offset);
+    if (ui.mode === 'write' && entry.caret) {
+      const c = entry.caret;
+      if (c.endPid && !c.collapsed && restoreSel(c)) ui.sel = c;
+      else setCaret(c.pid, c.offset);
+    }
   }
+
+  /* 撤销打字和排版时不弹提示，和系统编辑器一样安静；撤销送审、定稿这类大步骤时才提示，并给出重做。 */
+  const LOUD_UNDO = new Set(['送审', '生成定稿', '存为版本', '移动段落', '采用改法', '保留原句', '自己重写', '取消决定', '本段全部采用', '本段全部保留']);
 
   function undo() {
     const a = current();
     if (!a) return;
-    if (ui.running && ui.running.articleId === a.id) { toast('AI 正在改稿，可以先取消改稿。'); return; }
+    if (ui.running && ui.running.articleId === a.id) { toast('AI 正在改稿'); return; }
     const st = stackFor(a.id);
     const entry = st.undo.pop();
-    if (!entry) { announce('没有可以撤销的操作'); toast('没有可以撤销的操作'); return; }
+    if (!entry) { announce('没有可以撤销的操作'); return; }
     st.redo.push({ label: entry.label, article: S.clone(a), mode: ui.mode, focusKey: ui.focusKey, caret: getCaret() });
     lastUndoKind = null;
+    pending = null;
     restoreEntry(entry);
-    if (entry.label === '输入') announce('已撤销输入');
-    else toast(`已撤销：${entry.label}`, { action: { label: '重做', run: redo } });
+    if (LOUD_UNDO.has(entry.label)) toast(`已撤销${entry.label}`, { action: { label: '重做', run: redo } });
+    else announce(`已撤销${entry.label}`);
   }
 
   function redo() {
@@ -2130,9 +3016,9 @@ kbd {
     if (!entry) { announce('没有可以重做的操作'); return; }
     st.undo.push({ label: entry.label, article: S.clone(a), mode: ui.mode, focusKey: ui.focusKey, caret: getCaret() });
     lastUndoKind = null;
+    pending = null;
     restoreEntry(entry);
-    if (entry.label === '输入') announce('已重做输入');
-    else toast(`已重做：${entry.label}`);
+    announce(`已重做${entry.label}`);
   }
 
   /* ───────────────────────── 提示、朗读、浮层 ───────────────────────── */
@@ -2181,6 +3067,7 @@ kbd {
     closePopover(false);
     const ed = editorEl();
     const returnSel = ed && ed.isContentEditable && document.activeElement === ed ? editSel() : null;
+    if (returnSel) ui.sel = returnSel;
     const node = document.createElement('div');
     node.className = `popover ${opts.className || ''}`;
     if (opts.role) node.setAttribute('role', opts.role);
@@ -2211,13 +3098,14 @@ kbd {
       const items = $$('.menu-item:not(:disabled)', node);
       if (!items.length) return;
       const i = items.indexOf(document.activeElement);
-      if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
-      if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+      const grid = Boolean($('.palette', node));
+      if (e.key === 'ArrowDown' || (grid && e.key === 'ArrowRight')) { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+      if (e.key === 'ArrowUp' || (grid && e.key === 'ArrowLeft')) { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
       if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
       if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
       if (e.key === 'Tab') closePopover(false);
     });
-    const first = opts.focus ? $(opts.focus, node) : $('.menu-item:not(:disabled), textarea, input, button', node);
+    const first = (opts.focus && $(opts.focus, node)) || $('.menu-item:not(:disabled), textarea, input, button', node);
     if (first) first.focus({ preventScroll: true });
     return node;
   }
@@ -2228,9 +3116,9 @@ kbd {
       if (it.label && it.heading) return `<div class="menu-label">${esc(it.label)}</div>`;
       const role = it.checked !== undefined ? 'menuitemradio' : 'menuitem';
       return `<button type="button" class="menu-item ${it.danger ? 'danger' : ''}" role="${role}" data-i="${i}" ${it.checked !== undefined ? `aria-checked="${it.checked}"` : ''} ${it.disabled ? 'disabled' : ''}>
-        ${it.icon ? icon(it.icon) : ''}<span class="grow">${esc(it.label)}</span>${it.kbd ? `<kbd>${esc(it.kbd)}</kbd>` : ''}</button>`;
+        ${it.icon ? icon(it.icon) : ''}<span class="grow ${it.cls || ''}"${it.style ? ` style="${esc(it.style)}"` : ''}>${esc(it.label)}</span>${it.kbd ? `<kbd>${esc(it.kbd)}</kbd>` : ''}</button>`;
     }).join('')}</div>`;
-    const node = openPopover(anchor, html, { ...opts });
+    const node = openPopover(anchor, html, { focus: '.menu-item[aria-checked="true"]:not(:disabled)', ...opts });
     node.addEventListener('click', (e) => {
       const b = e.target.closest('.menu-item');
       if (!b) return;
@@ -2437,13 +3325,13 @@ kbd {
       openMenu(more, [
         { label: '打开', icon: 'i-doc', run: () => openArticle(id) },
         { label: '导出 Markdown', icon: 'i-export', run: () => exportMarkdown(data.articles.find((a) => a.id === id)) },
+        { label: '导出 HTML', icon: 'i-export', run: () => exportHTML(data.articles.find((a) => a.id === id)) },
         '-',
         { label: '删除文章', icon: 'i-trash', danger: true, run: () => deleteArticle(id) },
       ]);
     }
   });
   $('#new-article').addEventListener('click', newArticle);
-  $('#about-btn').addEventListener('click', showAbout);
   $('#sidebar-close').addEventListener('click', () => { ui.sidebarOpen = false; applyLayout(); renderToolbar(); });
   el.scrim.addEventListener('click', () => { ui.sidebarOpen = false; applyLayout(); renderToolbar(); });
   el.examplesNav.addEventListener('click', () => {
@@ -2470,25 +3358,13 @@ kbd {
 
   /* ───────────────────────── 工具栏 ───────────────────────── */
 
-  function statusLine(a) {
-    if (ui.running && ui.running.articleId === a.id) return `AI 正在改稿 · 第 ${ui.running.roundN} 轮（本地模拟）`;
-    const r = S.activeRound(a);
-    if (r && r.status === 'pending') return `第 ${r.n} 轮改稿已返回 · 待审阅`;
-    if (ui.mode === 'history') return `${a.versions.length} 个版本 · ${a.rounds.filter((x) => x.status === 'done').length} 轮改稿`;
-    return `已保存在本机 · ${fmt(a.updatedAt)}`;
-  }
-
   function renderToolbar() {
     const a = current();
     const sidebarBtn = `<button type="button" class="icon-btn" id="tb-sidebar" aria-label="${ui.sidebarOpen ? '隐藏' : '显示'}文章库" aria-pressed="${ui.sidebarOpen}" title="文章库">${icon('i-sidebar')}</button>`;
-    if (ui.view === 'examples') {
-      const recs = S.allRecords(data.articles);
-      const n = new Set(recs.map((r) => r.articleId)).size;
-      el.toolbar.innerHTML = `${sidebarBtn}<div class="tb-title"><span class="t">改写范例</span><span class="s">${recs.length} 处取舍 · 来自 ${n} 篇文章</span></div>`;
-      return;
-    }
-    if (!a) {
-      el.toolbar.innerHTML = `${sidebarBtn}<div class="tb-title"><span class="t">Redraft</span></div>`;
+    const more = `<button type="button" class="icon-btn" data-act="more" aria-haspopup="menu" aria-expanded="false" aria-label="更多" title="更多">${icon('i-more')}</button>`;
+    if (ui.view === 'examples' || !a) {
+      el.toolbar.innerHTML = `<div class="tb-start">${sidebarBtn}<span class="tb-title">${ui.view === 'examples' ? '改写范例' : ''}</span></div><div></div><div class="tb-end">${more}</div>`;
+      renderFormatBar();
       return;
     }
     const round = S.activeRound(a);
@@ -2496,23 +3372,24 @@ kbd {
     const running = round && round.status === 'running';
     const markCount = Object.keys(a.marks).length;
     let primary = '';
-    if (ui.mode === 'write') {
-      if (running) primary = '<button type="button" class="btn" disabled><span class="spinner" aria-hidden="true"></span>改稿中…</button>';
-      else if (pending) primary = `<button type="button" class="btn primary" data-act="go-review">${icon('i-revise', 'sm')}<span><span class="hide-narrow">继续</span>审阅</span></button>`;
-      else primary = `<button type="button" class="btn primary" data-act="submit" ${markCount ? '' : 'disabled'} title="请 AI 改稿（${K.mod}${K.enter}）">${icon('i-revise', 'sm')}<span><span class="hide-narrow">请 AI </span>改稿${markCount ? `<span class="count"> · ${markCount}</span>` : ''}</span></button>`;
+    if (running) {
+      primary = `<span class="tb-run" role="status"><span class="spinner" aria-hidden="true"></span><span class="hide-narrow">改稿中</span></span><button type="button" class="icon-btn" data-act="cancel-run" aria-label="取消改稿" title="取消改稿">${icon('i-x')}</button>`;
+    } else if (ui.mode === 'write' && pending) {
+      primary = `<button type="button" class="btn tinted" data-act="go-review">审阅</button>`;
+    } else if (ui.mode === 'write' && markCount) {
+      primary = `<button type="button" class="btn tinted" data-act="submit" title="请 AI 改稿（${K.mod}${K.enter}）" aria-label="请 AI 改稿，已标记 ${markCount} 段">${icon('i-revise', 'sm')}<span class="hide-narrow">改稿</span><span class="count">${markCount}</span></button>`;
     } else if (ui.mode === 'review' && pending) {
-      primary = `<button type="button" class="btn primary" data-act="finish" title="完成本轮（${K.mod}${K.enter}）">${icon('i-check', 'sm')}<span>完成<span class="hide-narrow">本轮</span></span></button>`;
+      primary = `<button type="button" class="btn primary" data-act="finish" title="完成本轮（${K.mod}${K.enter}）">完成</button>`;
     }
     const seg = (mode, label, extra = '') => `<button type="button" data-mode="${mode}" aria-pressed="${ui.mode === mode}">${label}${extra}</button>`;
     el.toolbar.innerHTML = `
-      ${sidebarBtn}
-      <div class="tb-title"><span class="t">${esc(a.title || '无标题')}</span><span class="s">${esc(statusLine(a))}</span></div>
+      <div class="tb-start">${sidebarBtn}</div>
       <div class="segmented" role="group" aria-label="视图">
         ${seg('write', '写作')}${seg('review', '审阅', pending ? '<span class="pip" aria-label="（待审阅）"></span>' : '')}${seg('history', '历史')}
       </div>
-      <div class="tb-group" style="flex:1 1 0;justify-content:flex-end">
+      <div class="tb-end">
         ${primary}
-        <button type="button" class="icon-btn" data-act="more" aria-haspopup="menu" aria-expanded="false" aria-label="更多">${icon('i-more')}</button>
+        ${more}
         <button type="button" class="icon-btn" data-act="inspector" aria-pressed="${ui.inspectorOpen}" aria-label="${ui.inspectorOpen ? '隐藏' : '显示'}检查器" title="检查器">${icon('i-inspector')}</button>
       </div>`;
     renderFormatBar();
@@ -2527,18 +3404,18 @@ kbd {
     if (act === 'submit') submitRound();
     if (act === 'go-review') setMode('review');
     if (act === 'finish') finishRound();
-    if (act === 'snapshot') saveVersion();
+    if (act === 'cancel-run') cancelRun();
     if (act === 'inspector') { ui.inspectorOpen = !ui.inspectorOpen; ui.showBar = !ui.inspectorOpen; renderInspector(); applyLayout(); renderToolbar(); if (ui.mode === 'review') positionHunkBar(); requestAnimationFrame(renderGutter); }
     if (act === 'more') openMoreMenu(b);
   });
 
   function openMoreMenu(anchor) {
-    const a = current();
+    const a = ui.view === 'article' ? current() : null;
     openMenu(anchor, [
       ...(a ? [
-        { label: '存为版本', icon: 'i-bookmark', kbd: `${K.mod}S`, run: saveVersion },
         { label: '导出 Markdown', icon: 'i-export', run: () => exportMarkdown(a) },
-        { label: '查看这句话的来历', icon: 'i-history', kbd: `${K.mod}I`, run: openProvenance },
+        { label: '导出 HTML', icon: 'i-export', run: () => exportHTML(a) },
+        { label: '字数统计', icon: 'i-doc', run: () => showWordCount(a) },
         '-',
       ] : []),
       { label: '键盘快捷键', icon: 'i-keyboard', kbd: `${K.mod}/`, run: showShortcuts },
@@ -2548,30 +3425,59 @@ kbd {
     ], { alignRight: true });
   }
 
-  /* ───────────────────────── 编辑工具栏 ─────────────────────────
-   * 写作时常驻在窗口工具栏下方，正文从它下面滚过。只放正文模型真实支持的操作：
-   * 正文是纯文本段落，不提供粗体、标题等格式按钮，以免破坏逐词对比和溯源。
+  /* ───────────────────────── 排版工具栏 ─────────────────────────
+   * 写作时常驻在窗口工具栏下方。左侧是排版，作用于选区或光标处，按下时不夺走正文焦点；
+   * 右侧固定放 AI 标记和“更多”。窄屏时排版部分横向滚动，右侧不动。
    */
 
   const AK = isMac ? 'Meta' : 'Control';
   const formatBarVisible = () => ui.view === 'article' && ui.mode === 'write' && Boolean(current());
-  const FB_ITEMS = {
+  const FB = {
     undo: { icon: 'i-undo', label: '撤销', kbd: `${K.mod}Z`, keys: `${AK}+Z` },
     redo: { icon: 'i-redo', label: '重做', kbd: `${K.mod}${K.shift}Z`, keys: `${AK}+Shift+Z` },
-    mark: { icon: 'i-mark', label: '标记给 AI 修改', text: '标记', kbd: `${K.mod}${K.shift}M`, keys: `${AK}+Shift+M` },
-    instr: { label: '修改要求', menu: true },
-    up: { icon: 'i-arrow-up', label: '上移段落', kbd: `${K.alt}${K.shift}${K.up}`, keys: 'Alt+Shift+ArrowUp' },
-    down: { icon: 'i-arrow-down', label: '下移段落', kbd: `${K.alt}${K.shift}${K.down}`, keys: 'Alt+Shift+ArrowDown' },
-    save: { icon: 'i-bookmark', label: '存为版本', text: '存为版本', kbd: `${K.mod}S`, keys: `${AK}+S` },
-    prov: { icon: 'i-history', label: '这句话的来历', text: '来历', kbd: `${K.mod}I`, keys: `${AK}+I` },
-    display: { label: '显示设置', menu: true },
-    overflow: { icon: 'i-more', label: '更多编辑操作', menu: true },
+    style: { label: '样式', menu: true, val: '正文', w: 'w-style' },
+    font: { label: '字体', menu: true, val: '黑体', w: 'w-font' },
+    sizeDown: { icon: 'i-minus', label: '减小字号', kbd: `${K.mod}${K.shift},`, keys: `${AK}+Shift+Comma` },
+    size: { label: '字号', menu: true, val: '17', w: 'w-size', noChevron: true },
+    sizeUp: { icon: 'i-plus', label: '增大字号', kbd: `${K.mod}${K.shift}.`, keys: `${AK}+Shift+Period` },
+    b: { glyph: 'B', label: '粗体', kbd: `${K.mod}B`, keys: `${AK}+B`, toggle: true },
+    i: { glyph: 'I', label: '斜体', kbd: `${K.mod}I`, keys: `${AK}+I`, toggle: true },
+    u: { glyph: 'U', label: '下划线', kbd: `${K.mod}U`, keys: `${AK}+U`, toggle: true },
+    s: { glyph: 'S', label: '删除线', kbd: `${K.mod}${K.shift}X`, keys: `${AK}+Shift+X`, toggle: true },
+    color: { label: '文字颜色', menu: true, swatch: 'a' },
+    hl: { label: '突出显示', menu: true, swatch: 'marker' },
+    align: { icon: 'i-al-left', label: '对齐', menu: true },
+    lh: { icon: 'i-lh', label: '行距', menu: true },
+    ul: { icon: 'i-ul', label: '项目符号', kbd: `${K.mod}${K.shift}8`, keys: `${AK}+Shift+8`, toggle: true },
+    ol: { icon: 'i-ol', label: '编号列表', kbd: `${K.mod}${K.shift}7`, keys: `${AK}+Shift+7`, toggle: true },
+    outdent: { icon: 'i-outdent', label: '减少缩进', kbd: `${K.mod}[`, keys: `${AK}+BracketLeft` },
+    indent: { icon: 'i-indent', label: '增加缩进', kbd: `${K.mod}]`, keys: `${AK}+BracketRight` },
+    clear: { icon: 'i-clear', label: '清除格式', kbd: `${K.mod}\\`, keys: `${AK}+Backslash` },
+    mark: { icon: 'i-revise', label: '标记给 AI 改稿', kbd: `${K.mod}${K.shift}M`, keys: `${AK}+Shift+M`, menu: true },
+    more: { icon: 'i-more', label: '更多', menu: true },
   };
   let fbRove = 'undo';
 
-  function fbButton(id, cls = '') {
-    const it = FB_ITEMS[id];
-    return `<button type="button" class="fb-btn ${it.text ? 'has-text' : ''} ${cls}" data-fb="${id}" tabindex="-1" aria-label="${esc(it.label)}"${it.keys ? ` aria-keyshortcuts="${it.keys}"` : ''}${it.menu ? ' aria-haspopup="true" aria-expanded="false"' : ''}>${it.icon ? icon(it.icon) : ''}${it.text ? `<span class="fb-label">${esc(it.text)}</span>` : ''}</button>`;
+  function fbButton(id) {
+    const it = FB[id];
+    let inner = '';
+    if (it.glyph) inner = `<span class="g g-${id}" aria-hidden="true">${it.glyph}</span>`;
+    else if (it.swatch === 'a') inner = `<span class="fb-sw" aria-hidden="true"><span class="g g-a">A</span><i class="fb-bar"></i></span>`;
+    else if (it.swatch === 'marker') inner = `<span class="fb-sw" aria-hidden="true">${icon('i-marker')}<i class="fb-bar"></i></span>`;
+    else if (it.val) inner = `<span class="fb-val">${esc(it.val)}</span>`;
+    else if (it.icon) inner = icon(it.icon);
+    if (it.menu && !it.noChevron && id !== 'more') inner += icon('i-chevron-down', 'xs');
+    const attrs = [
+      `type="button"`,
+      `class="fb-btn ${it.w || ''} ${it.menu && id !== 'more' ? 'fb-menu' : ''}"`,
+      `data-fb="${id}"`,
+      'tabindex="-1"',
+      `aria-label="${esc(it.label)}"`,
+      it.keys ? `aria-keyshortcuts="${it.keys}"` : '',
+      it.menu ? 'aria-haspopup="menu" aria-expanded="false"' : '',
+      it.toggle ? 'aria-pressed="false"' : '',
+    ].filter(Boolean).join(' ');
+    return `<button ${attrs}>${inner}</button>`;
   }
 
   function renderFormatBar() {
@@ -2582,37 +3488,61 @@ kbd {
       return;
     }
     if (!fb.dataset.built) {
+      const g = (label, ids) => `<div class="fb-group" role="group" aria-label="${label}">${ids.map(fbButton).join('')}</div>`;
+      const sep = '<span class="fb-sep" aria-hidden="true"></span>';
       fb.innerHTML = `
-        <div class="fb-group" role="group" aria-label="撤销">${fbButton('undo')}${fbButton('redo')}</div>
-        <span class="fb-sep" aria-hidden="true"></span>
-        <div class="fb-group fb-combo" role="group" aria-label="AI 改稿标记">${fbButton('mark')}<button type="button" class="fb-btn fb-menu" data-fb="instr" tabindex="-1" aria-haspopup="menu" aria-expanded="false" aria-label="修改要求"><span class="fb-label">修改要求</span>${icon('i-chevron-down', 'xs')}</button></div>
-        <span class="fb-sep fb-opt" aria-hidden="true"></span>
-        <div class="fb-group fb-opt" role="group" aria-label="段落">${fbButton('up')}${fbButton('down')}</div>
-        <span class="fb-sep" aria-hidden="true"></span>
-        <div class="fb-group" role="group" aria-label="版本">${fbButton('save')}${fbButton('prov', 'fb-opt')}</div>
-        <div class="fb-spacer"></div>
-        <div class="fb-status" id="fb-status"></div>
-        <div class="fb-group">
-          <button type="button" class="fb-btn fb-menu fb-aa" data-fb="display" tabindex="-1" aria-haspopup="dialog" aria-expanded="false" aria-label="显示设置"><span class="aa" aria-hidden="true">Aa</span>${icon('i-chevron-down', 'xs')}</button>
-          ${fbButton('overflow', 'fb-more')}
+        <div class="fb-scroll" id="fb-scroll">
+          ${g('撤销', ['undo', 'redo'])}${sep}
+          ${g('样式', ['style'])}${sep}
+          ${g('字体与字号', ['font', 'sizeDown', 'size', 'sizeUp'])}${sep}
+          ${g('文字样式', ['b', 'i', 'u', 's', 'color', 'hl'])}${sep}
+          ${g('段落', ['align', 'lh', 'ul', 'ol', 'outdent', 'indent'])}${sep}
+          ${g('清除', ['clear'])}
+        </div>
+        <div class="fb-end">
+          <span class="fb-lock" id="fb-lock" hidden>${icon('i-lock', 'xs')}<span></span></span>
+          ${fbButton('mark')}${fbButton('more')}
         </div>`;
       fb.dataset.built = '1';
+      $('#fb-scroll', fb).addEventListener('scroll', () => { hideTip(); updateFbFade(); if (popover && popover.anchor && fb.contains(popover.anchor)) closePopover(false); }, { passive: true });
     }
     syncFormatBar();
+    updateFbFade();
+  }
+
+  function updateFbFade() {
+    const sc = $('#fb-scroll', el.formatbar);
+    if (!sc) return;
+    const max = sc.scrollWidth - sc.clientWidth;
+    sc.classList.toggle('fade-l', sc.scrollLeft > 2);
+    sc.classList.toggle('fade-r', max - sc.scrollLeft > 2);
   }
 
   function fbSet(id, o) {
     const b = el.formatbar.querySelector(`[data-fb="${id}"]`);
     if (!b) return;
-    b.setAttribute('aria-disabled', o.disabled ? 'true' : 'false');
-    if (o.pressed !== undefined) b.setAttribute('aria-pressed', String(Boolean(o.pressed)));
-    b.dataset.tip = o.tip || FB_ITEMS[id].label;
-    b.dataset.reason = o.disabled ? (o.reason || '') : '';
-    if (b.dataset.reason) b.setAttribute('aria-description', b.dataset.reason);
-    else b.removeAttribute('aria-description');
-    if (o.label) b.setAttribute('aria-label', o.label);
-    if (o.text !== undefined) { const l = $('.fb-label', b); if (l && l.textContent !== o.text) l.textContent = o.text; }
+    const dis = o.disabled ? 'true' : 'false';
+    if (b.getAttribute('aria-disabled') !== dis) b.setAttribute('aria-disabled', dis);
+    if (o.pressed !== undefined) {
+      const v = o.pressed === 'mixed' ? 'mixed' : String(Boolean(o.pressed));
+      if (b.getAttribute('aria-pressed') !== v) b.setAttribute('aria-pressed', v);
+    }
+    const label = o.label || FB[id].label;
+    if (b.getAttribute('aria-label') !== label) b.setAttribute('aria-label', label);
+    b.dataset.tip = o.tip || label;
+    if (o.val !== undefined) { const v = $('.fb-val', b); if (v && v.textContent !== String(o.val)) v.textContent = o.val; }
     if (o.icon) { const u = $('use', b); if (u && u.getAttribute('href') !== `#${o.icon}`) u.setAttribute('href', `#${o.icon}`); }
+    if (o.bar !== undefined) b.style.setProperty('--bar', o.bar);
+  }
+
+  const colorVar = (key, id) => (id ? `var(--${key === 'c' ? 'tc' : 'hc'}-${id})` : key === 'c' ? 'currentColor' : 'transparent');
+
+  function fbState() {
+    const a = current();
+    if (!a || isLocked(a)) return null;
+    const c = editSel();
+    if (!c) return null;
+    return { a, c, st: R.selectionState(a.paragraphs, c, pendingFor(c)) };
   }
 
   function syncFormatBar() {
@@ -2621,67 +3551,64 @@ kbd {
     const round = S.activeRound(a);
     const running = Boolean(round && round.status === 'running');
     const locked = Boolean(round);
-    const lockReason = running ? 'AI 正在改稿，正文暂不能编辑' : '审阅完成前，正文保持送审时的样子';
-    const st = stackFor(a.id);
-    const c = locked ? null : editSel();
-    const pids = c ? selectedPids(a, c) : [];
-    const textPids = pids.filter((pid) => a.paragraphs.find((p) => p.id === pid).text.trim());
-    const n = textPids.length;
-    const multi = n > 1;
-    const lastUndo = st.undo[st.undo.length - 1];
-    const lastRedo = st.redo[st.redo.length - 1];
-    const noSel = '先把光标放进正文';
-    const markReason = locked ? lockReason : !c ? noSel : !n ? '空段落不需要改稿' : '';
+    const stk = stackFor(a.id);
+    const s = fbState();
+    const st = s && s.st;
+    const off = !st;
+    const lastUndo = stk.undo[stk.undo.length - 1];
+    const lastRedo = stk.redo[stk.redo.length - 1];
+    fbSet('undo', { disabled: running || !lastUndo, label: lastUndo ? `撤销${lastUndo.label}` : '撤销' });
+    fbSet('redo', { disabled: running || !lastRedo, label: lastRedo ? `重做${lastRedo.label}` : '重做' });
 
-    fbSet('undo', { disabled: running || !lastUndo, tip: lastUndo ? `撤销${lastUndo.label}` : '撤销', label: lastUndo ? `撤销${lastUndo.label}` : '撤销', reason: running ? lockReason : '没有可以撤销的操作' });
-    fbSet('redo', { disabled: running || !lastRedo, tip: lastRedo ? `重做${lastRedo.label}` : '重做', label: lastRedo ? `重做${lastRedo.label}` : '重做', reason: running ? lockReason : '没有可以重做的操作' });
+    const styleType = st && (st.type === 'ul' || st.type === 'ol' ? 'p' : st.type);
+    fbSet('style', { disabled: off, val: !st ? '正文' : styleType === null ? '—' : R.BLOCK[styleType].label, label: st && styleType ? `样式：${R.BLOCK[styleType].label}` : '样式' });
+    const font = st && st.f !== null ? R.FONTS.find((f) => f.id === st.f) : null;
+    fbSet('font', { disabled: off, val: !st ? '黑体' : font ? font.label : '—', label: font ? `字体：${font.label}` : '字体' });
+    const z = st ? st.z : 17;
+    fbSet('size', { disabled: off, val: z === null ? '—' : z, label: z === null ? '字号' : `字号：${z}` });
+    fbSet('sizeDown', { disabled: off || (z !== null && z <= R.SIZES[0]) });
+    fbSet('sizeUp', { disabled: off || (z !== null && z >= R.SIZES[R.SIZES.length - 1]) });
+    for (const k of ['b', 'i', 'u', 's']) fbSet(k, { disabled: off, pressed: st ? st[k] : false });
+    const cl = st && st.c !== null ? R.COLORS.find((x) => x.id === st.c) : null;
+    fbSet('color', { disabled: off, bar: st && st.c !== null ? colorVar('c', st.c) : 'transparent', label: cl && cl.id ? `文字颜色：${cl.label}` : '文字颜色' });
+    const hl = st && st.h !== null ? R.HIGHLIGHTS.find((x) => x.id === st.h) : null;
+    fbSet('hl', { disabled: off, bar: st && st.h ? colorVar('h', st.h) : 'transparent', label: hl && hl.id ? `突出显示：${hl.label}` : '突出显示' });
+    const al = st && st.align ? st.align : 'left';
+    fbSet('align', { disabled: off, icon: `i-al-${al}`, label: `对齐：${R.ALIGNS.find((x) => x.id === al).label}` });
+    fbSet('lh', { disabled: off, label: st && st.lh ? `行距：${st.lh}` : '行距' });
+    fbSet('ul', { disabled: off, pressed: Boolean(st && st.type === 'ul') });
+    fbSet('ol', { disabled: off, pressed: Boolean(st && st.type === 'ol') });
+    fbSet('outdent', { disabled: off || st.indentMax === 0 });
+    fbSet('indent', { disabled: off || st.indentMin >= R.INDENT_MAX });
+    fbSet('clear', { disabled: off });
 
-    const allMarked = n > 0 && textPids.every((pid) => a.marks[pid]);
+    const pids = s ? selectedPids(a, s.c).filter((pid) => a.paragraphs.find((p) => p.id === pid).text.trim()) : [];
+    const marks = pids.map((pid) => a.marks[pid]).filter(Boolean);
+    const allMarked = pids.length > 0 && marks.length === pids.length;
+    const labels = new Set(marks.map((m) => S.instructionLabel(m)));
     fbSet('mark', {
-      disabled: Boolean(markReason), pressed: allMarked, reason: markReason,
-      icon: allMarked ? 'i-mark-on' : 'i-mark',
-      text: multi ? `标记 ${n} 段` : '标记',
-      label: allMarked ? (multi ? `取消标记所选 ${n} 段` : '取消标记这一段') : (multi ? `标记所选 ${n} 段` : '标记这一段'),
-      tip: allMarked ? (multi ? `取消标记所选 ${n} 段` : '取消标记这一段') : (multi ? `把所选 ${n} 段标记给 AI 修改` : '把这一段标记给 AI 修改'),
+      disabled: locked || !pids.length,
+      pressed: allMarked,
+      label: allMarked ? `已标记：${labels.size === 1 ? [...labels][0] : '多种要求'}` : '标记给 AI 改稿',
     });
-    const marks = textPids.map((pid) => a.marks[pid]).filter(Boolean);
-    let instrText = '修改要求';
-    if (marks.length) {
-      const labels = new Set(marks.map((m) => S.instructionLabel(m)));
-      instrText = labels.size === 1 ? [...labels][0] : '多种要求';
-    }
-    fbSet('instr', {
-      disabled: Boolean(markReason), reason: markReason, text: clip(instrText, 7),
-      label: marks.length ? `修改要求：${instrText}` : '选择修改要求并标记',
-      tip: marks.length ? `修改要求：${instrText}` : '选择修改要求并标记',
-    });
-    const fb = el.formatbar;
-    fb.querySelector('[data-fb="instr"]').classList.toggle('is-set', marks.length > 0);
+    el.formatbar.querySelector('[data-fb="mark"]').classList.toggle('is-on', allMarked);
 
-    const idx = c ? a.paragraphs.findIndex((p) => p.id === c.pid) : -1;
-    const span = pids.length > 1;
-    const moveReason = (edge) => (locked ? lockReason : !c ? noSel : span ? '一次只能移动一段' : edge);
-    fbSet('up', { disabled: locked || !c || span || idx <= 0, reason: moveReason('已经是第一段') });
-    fbSet('down', { disabled: locked || !c || span || idx >= a.paragraphs.length - 1, reason: moveReason('已经是最后一段') });
-    fbSet('save', { disabled: locked, reason: '改稿进行中，完成本轮后会自动保存定稿' });
-    const provOn = inspectorVisible() && ui.inspectorTab === 'prov';
-    fbSet('prov', { pressed: provOn, tip: provOn ? '收起这句话的来历' : '查看光标所在句子的来历' });
-    fbSet('display', { tip: '显示：字体、字号、行距、栏宽' });
-    fbSet('overflow', { tip: '更多编辑操作' });
-
-    const total = Object.keys(a.marks).length;
-    const status = $('#fb-status', fb);
-    let html;
-    if (locked) html = `${icon('i-lock', 'xs')}<span>${running ? '改稿中' : '待审阅'} · 正文已锁定</span>`;
-    else html = `${c ? `<span>第 ${idx + 1} / ${a.paragraphs.length} 段</span>` : ''}${total ? `<span class="fb-marked">已标记 ${total} 段</span>` : ''}`;
-    if (status.innerHTML !== html) status.innerHTML = html;
-    status.classList.toggle('locked', locked);
+    const lock = $('#fb-lock', el.formatbar);
+    lock.hidden = !locked;
+    if (locked) $('span', lock).textContent = running ? '改稿中' : '待审阅';
 
     const items = fbItems();
     const enabled = (b) => b.getAttribute('aria-disabled') !== 'true';
-    const inside = fb.contains(document.activeElement);
+    const inside = el.formatbar.contains(document.activeElement);
     const pick = items.find((b) => b.dataset.fb === fbRove && (inside || enabled(b))) || items.find(enabled) || items[0];
     items.forEach((b) => { b.tabIndex = b === pick ? 0 : -1; });
+  }
+
+  let syncQueued = false;
+  function queueSyncFormatBar() {
+    if (syncQueued) return;
+    syncQueued = true;
+    requestAnimationFrame(() => { syncQueued = false; syncFormatBar(); });
   }
 
   const fbItems = () => $$('.fb-btn', el.formatbar).filter((b) => b.offsetParent !== null);
@@ -2690,6 +3617,7 @@ kbd {
     fbItems().forEach((x) => { x.tabIndex = x === b ? 0 : -1; });
     fbRove = b.dataset.fb;
     b.focus({ preventScroll: true });
+    b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
   function focusFormatBar() {
     const items = fbItems();
@@ -2703,26 +3631,29 @@ kbd {
     else el.content.focus({ preventScroll: true });
   }
 
-  function runFormat(id, b, fromEditor) {
+  function runFormat(id, b) {
     const a = current();
     if (!a) return;
-    const wasEditor = fromEditor || document.activeElement === editorEl();
-    const c = editSel();
-    if (id === 'undo') undo();
-    else if (id === 'redo') redo();
-    else if (id === 'mark') markSelection();
-    else if (id === 'instr') { openInstrMenu(b); return; }
-    else if (id === 'up' || id === 'down') {
-      if (!c) return;
-      const i = a.paragraphs.findIndex((p) => p.id === c.pid);
-      moveParagraph(c.pid, i + (id === 'up' ? -1 : 1), 'toolbar');
-    } else if (id === 'save') { saveVersion(); return; }
-    else if (id === 'prov') toggleProvenance();
-    else if (id === 'display') { openDisplay(b); return; }
-    else if (id === 'overflow') { openFbOverflow(b); return; }
-    if (wasEditor && document.activeElement !== editorEl() && !popover && !dialogState) {
-      const s = editSel();
-      if (s) restoreSel(s);
+    switch (id) {
+      case 'undo': undo(); break;
+      case 'redo': redo(); break;
+      case 'style': openStyleMenu(b); break;
+      case 'font': openFontMenu(b); break;
+      case 'size': openSizeMenu(b); break;
+      case 'sizeDown': stepSize(-1); break;
+      case 'sizeUp': stepSize(1); break;
+      case 'b': case 'i': case 'u': case 's': toggleInline(id); break;
+      case 'color': openPalette(b, 'c'); break;
+      case 'hl': openPalette(b, 'h'); break;
+      case 'align': openAlignMenu(b); break;
+      case 'lh': openLineHeightMenu(b); break;
+      case 'ul': case 'ol': toggleList(id); break;
+      case 'indent': indentBlocks(1); break;
+      case 'outdent': indentBlocks(-1); break;
+      case 'clear': clearFormat(); break;
+      case 'mark': openInstrMenu(b); break;
+      case 'more': openFbMore(b); break;
+      default: break;
     }
   }
 
@@ -2741,13 +3672,13 @@ kbd {
     const fromEditor = !viaKeyboard && fbDownFromEditor;
     fbDownFromEditor = false;
     if (b.getAttribute('aria-disabled') === 'true') {
-      if (b.dataset.reason) { announce(b.dataset.reason); showTip(b); }
       if (fromEditor && document.activeElement !== editorEl()) returnToEditor();
       return;
     }
-    if (composing) { announce('请先完成输入法输入'); if (fromEditor) returnToEditor(); return; }
+    if (composing) { if (fromEditor) returnToEditor(); return; }
     fbRove = b.dataset.fb;
-    runFormat(b.dataset.fb, b, fromEditor);
+    if (fromEditor && document.activeElement !== editorEl()) returnToEditor();
+    runFormat(b.dataset.fb, b);
     if (viaKeyboard && !popover && !dialogState) {
       const again = fbItems().find((x) => x.dataset.fb === fbRove);
       if (again && again.getAttribute('aria-disabled') !== 'true') focusFb(again);
@@ -2767,7 +3698,7 @@ kbd {
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hideTip(); returnToEditor(); }
   });
 
-  /* —— 工具提示：悬停片刻或用键盘聚焦时显示名称、快捷键和不可用的原因 —— */
+  /* —— 工具提示：名称和快捷键，悬停片刻或键盘聚焦时显示 —— */
 
   let tipEl = null;
   let tipTimer = 0;
@@ -2776,12 +3707,12 @@ kbd {
     clearTimeout(tipTimer);
     if (tipEl) tipEl.remove();
     if (!b.dataset.tip || !document.contains(b)) { tipEl = null; return; }
-    const kbd = FB_ITEMS[b.dataset.fb] && FB_ITEMS[b.dataset.fb].kbd;
+    const kbd = FB[b.dataset.fb] && FB[b.dataset.fb].kbd;
     tipEl = document.createElement('div');
     tipEl.className = 'tip';
     tipEl.setAttribute('aria-hidden', 'true');
     tipEl.dataset.for = b.dataset.fb;
-    tipEl.innerHTML = `<span class="tip-main"><span>${esc(b.dataset.tip)}</span>${kbd ? `<kbd>${esc(kbd)}</kbd>` : ''}</span>${b.dataset.reason ? `<span class="tip-why">${esc(b.dataset.reason)}</span>` : ''}`;
+    tipEl.innerHTML = `<span>${esc(b.dataset.tip)}</span>${kbd ? `<kbd>${esc(kbd)}</kbd>` : ''}`;
     el.layer.appendChild(tipEl);
     const r = b.getBoundingClientRect();
     const w = tipEl.offsetWidth;
@@ -2798,7 +3729,7 @@ kbd {
     if (tipEl && tipEl.dataset.for === b.dataset.fb) return;
     clearTimeout(tipTimer);
     const warm = tipEl || Date.now() < tipWarmUntil;
-    tipTimer = setTimeout(() => showTip(b), warm ? 0 : 550);
+    tipTimer = setTimeout(() => showTip(b), warm ? 0 : 600);
   });
   el.formatbar.addEventListener('pointerout', (e) => {
     const b = e.target.closest('.fb-btn');
@@ -2810,36 +3741,98 @@ kbd {
   });
   el.formatbar.addEventListener('focusout', hideTip);
 
-  /* —— 修改要求菜单、收起的操作、显示设置 —— */
+  /* —— 工具栏的菜单 —— */
+
+  function openStyleMenu(b) {
+    const s = fbState();
+    const cur = s && s.st.type;
+    const kb = (n) => `${K.mod}${K.alt}${n}`;
+    openMenu(b, [
+      { label: '正文', cls: 'sty sty-p', checked: cur === 'p' || cur === 'ul' || cur === 'ol', kbd: kb(0), run: () => setBlockType('p') },
+      { label: '标题 1', cls: 'sty sty-h1', checked: cur === 'h1', kbd: kb(1), run: () => setBlockType('h1') },
+      { label: '标题 2', cls: 'sty sty-h2', checked: cur === 'h2', kbd: kb(2), run: () => setBlockType('h2') },
+      { label: '标题 3', cls: 'sty sty-h3', checked: cur === 'h3', kbd: kb(3), run: () => setBlockType('h3') },
+      { label: '引用', cls: 'sty sty-quote', checked: cur === 'quote', run: () => setBlockType('quote') },
+    ], { className: 'menu-pop' });
+  }
+
+  function openFontMenu(b) {
+    const s = fbState();
+    const cur = s ? s.st.f : '';
+    openMenu(b, R.FONTS.map((f) => ({ label: f.label, style: `font-family:${f.css}`, checked: cur === f.id, run: () => formatInline({ f: f.id || null }, '字体') })));
+  }
+
+  function openSizeMenu(b) {
+    const s = fbState();
+    const cur = s ? s.st.z : null;
+    openMenu(b, R.SIZES.map((z) => ({ label: String(z), checked: cur === z, run: () => setSize(z) })), { className: 'menu-narrow' });
+  }
+
+  function openPalette(b, key) {
+    const s = fbState();
+    const cur = s ? s.st[key] : null;
+    const list = key === 'c' ? R.COLORS : R.HIGHLIGHTS;
+    const label = key === 'c' ? '文字颜色' : '突出显示';
+    const html = `<div class="palette" role="menu" aria-label="${label}">${list.map((x, i) => `<button type="button" class="menu-item swatch ${x.id ? '' : 'is-none'} k-${key}" role="menuitemradio" aria-checked="${cur === x.id}" data-i="${i}" aria-label="${esc(x.label)}" title="${esc(x.label)}" style="--sw:${colorVar(key, x.id)}"></button>`).join('')}</div>`;
+    const node = openPopover(b, html, { className: 'palette-pop', focus: '.swatch[aria-checked="true"]' });
+    node.addEventListener('click', (e) => {
+      const sw = e.target.closest('.swatch');
+      if (!sw) return;
+      const id = list[Number(sw.dataset.i)].id;
+      closePopover(true);
+      formatInline({ [key]: id || null }, label);
+    });
+  }
+
+  function openAlignMenu(b) {
+    const s = fbState();
+    const cur = s ? s.st.align : 'left';
+    const kb = { left: 'L', center: 'E', right: 'R', justify: 'J' };
+    openMenu(b, R.ALIGNS.map((x) => ({ label: x.label, icon: `i-al-${x.id}`, checked: cur === x.id, kbd: `${K.mod}${K.shift}${kb[x.id]}`, run: () => setAlign(x.id) })));
+  }
+
+  function openLineHeightMenu(b) {
+    const s = fbState();
+    const cur = s ? s.st.lh : null;
+    openMenu(b, R.LINE_HEIGHTS.map((v) => ({ label: String(v), checked: cur === v, run: () => setLineHeight(v) })), { className: 'menu-narrow' });
+  }
+
+  function openFbMore(b) {
+    const a = current();
+    const c = editSel();
+    const locked = isLocked(a);
+    const idx = c ? a.paragraphs.findIndex((p) => p.id === c.pid) : -1;
+    const span = c && selectedPids(a, c).length > 1;
+    const provOn = inspectorVisible() && ui.inspectorTab === 'prov';
+    openMenu(b, [
+      { label: '上移段落', icon: 'i-arrow-up', kbd: `${K.alt}${K.shift}${K.up}`, disabled: locked || !c || span || idx <= 0, run: () => moveParagraph(c.pid, idx - 1, 'toolbar') },
+      { label: '下移段落', icon: 'i-arrow-down', kbd: `${K.alt}${K.shift}${K.down}`, disabled: locked || !c || span || idx >= a.paragraphs.length - 1, run: () => moveParagraph(c.pid, idx + 1, 'toolbar') },
+      '-',
+      { label: '存为版本…', icon: 'i-bookmark', kbd: `${K.mod}S`, disabled: locked, run: saveVersion },
+      { label: provOn ? '收起这句话的来历' : '这句话的来历', icon: 'i-history', run: toggleProvenance },
+    ], { alignRight: true });
+  }
 
   function openInstrMenu(b) {
     const a = current();
     const c = editSel();
-    const pids = selectedPids(a, c).filter((pid) => a.paragraphs.find((p) => p.id === pid).text.trim());
+    const pids = c ? selectedPids(a, c).filter((pid) => a.paragraphs.find((p) => p.id === pid).text.trim()) : [];
     if (!pids.length) return;
     const marks = pids.map((pid) => a.marks[pid]);
     const anyMarked = marks.some(Boolean);
     const first = marks[0];
-    const uniform = marks.every((m) => m && first && m.instruction === first.instruction && (m.custom || '') === (first.custom || '')) ? first : null;
+    const same = marks.every((m) => m && first && m.instruction === first.instruction && (m.custom || '') === (first.custom || '')) ? first : null;
     const total = Object.keys(a.marks).length;
     const items = [
-      { label: pids.length > 1 ? `所选 ${pids.length} 段想怎样修改` : anyMarked ? '想怎样修改这一段' : '选择要求，同时标记这一段', heading: true },
-      ...AI.INSTRUCTIONS.map((it) => ({ label: it.label, checked: Boolean(uniform && !uniform.custom && uniform.instruction === it.id), run: () => applyMarks(pids, it.id) })),
-      { label: uniform && uniform.custom ? `自定义：${clip(uniform.custom, 10)}` : '自定义要求…', checked: Boolean(uniform && uniform.custom), run: () => customInstruction(pids) },
+      { label: pids.length > 1 ? `修改要求 · ${pids.length} 段` : '修改要求', heading: true },
+      ...AI.INSTRUCTIONS.map((it) => ({ label: it.label, checked: Boolean(same && !same.custom && same.instruction === it.id), run: () => applyMarks(pids, it.id) })),
+      { label: same && same.custom ? `自定义：${clip(same.custom, 10)}` : '自定义…', checked: Boolean(same && same.custom), run: () => customInstruction(pids) },
     ];
     const selMarked = marks.filter(Boolean).length;
-    if (anyMarked || total) items.push('-');
-    if (anyMarked) items.push({ label: pids.length > 1 ? '取消标记所选段落' : '取消标记', icon: 'i-x', run: () => applyMarks(pids, null) });
-    if (total > selMarked) items.push({ label: `取消全部标记（${total} 段）`, icon: 'i-x', run: clearAllMarks });
-    openMenu(b, items);
-  }
-
-  function openFbOverflow(b) {
-    const item = (id) => {
-      const btn = el.formatbar.querySelector(`[data-fb="${id}"]`);
-      return { label: FB_ITEMS[id].label, icon: FB_ITEMS[id].icon, kbd: FB_ITEMS[id].kbd, disabled: btn.getAttribute('aria-disabled') === 'true', run: () => runFormat(id, btn) };
-    };
-    openMenu(b, [item('up'), item('down'), '-', item('prov')], { alignRight: true });
+    if (anyMarked || total > selMarked) items.push('-');
+    if (anyMarked) items.push({ label: '取消标记', icon: 'i-x', run: () => applyMarks(pids, null) });
+    if (total > selMarked) items.push({ label: `取消全部标记（${total}）`, run: clearAllMarks });
+    openMenu(b, items, { alignRight: true });
   }
 
   function toggleProvenance() {
@@ -2855,59 +3848,8 @@ kbd {
     openProvenance();
   }
 
-  function applyDisplay() {
-    const s = el.app.style;
-    s.setProperty('--read-size', `${display.size}px`);
-    s.setProperty('--read-lh', String(LEADING[display.leading] || LEADING.normal));
-    s.setProperty('--measure', MEASURE[display.measure] || MEASURE.normal);
-    el.app.dataset.font = display.font;
-    el.app.classList.toggle('focus-mode', Boolean(display.focus));
-    el.app.classList.toggle('no-para-ctl', !display.gutter);
-    requestAnimationFrame(() => { renderGutter(); if (ui.mode === 'review') positionHunkBar(); });
-  }
-
-  function displayHTML() {
-    const seg = (key, opts) => `<div class="segmented small" role="radiogroup" aria-labelledby="dk-${key}">${opts.map(([v, l]) => `<button type="button" role="radio" aria-checked="${display[key] === v}" data-disp="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
-    const sw = (key, label, hint) => `<button type="button" class="disp-switch" role="switch" aria-checked="${Boolean(display[key])}" data-disp="${key}"><span class="grow"><span class="l">${label}</span><span class="h">${hint}</span></span><span class="sw" aria-hidden="true"></span></button>`;
-    const isDefault = Object.keys(DISPLAY_DEFAULT).every((k) => display[k] === DISPLAY_DEFAULT[k]);
-    return `<div class="disp">
-      <div class="disp-title">显示<span>只影响阅读与书写，不改动正文</span></div>
-      <div class="disp-row"><span class="disp-k" id="dk-font">字体</span>${seg('font', [['sans', '无衬线'], ['serif', '衬线']])}</div>
-      <div class="disp-row"><span class="disp-k" id="dk-size">字号</span><div class="stepper" role="group" aria-labelledby="dk-size">
-        <button type="button" data-disp="size" data-v="-1" aria-label="减小字号" ${display.size <= SIZE_MIN ? 'disabled' : ''}><span class="a-sm" aria-hidden="true">A</span></button>
-        <output aria-live="polite">${display.size}</output>
-        <button type="button" data-disp="size" data-v="1" aria-label="增大字号" ${display.size >= SIZE_MAX ? 'disabled' : ''}><span class="a-lg" aria-hidden="true">A</span></button>
-      </div></div>
-      <div class="disp-row"><span class="disp-k" id="dk-leading">行距</span>${seg('leading', [['tight', '紧凑'], ['normal', '标准'], ['loose', '宽松']])}</div>
-      <div class="disp-row"><span class="disp-k" id="dk-measure">栏宽</span>${seg('measure', [['narrow', '窄'], ['normal', '标准'], ['wide', '宽']])}</div>
-      <div class="menu-sep"></div>
-      ${sw('focus', '专注当前段落', '其他段落变淡')}
-      ${sw('gutter', '段落旁的快捷控件', '悬停时显示拖动手柄和标记圆点')}
-      <div class="disp-foot"><button type="button" class="btn ghost" data-disp="reset" ${isDefault ? 'disabled' : ''}>恢复默认</button></div>
-    </div>`;
-  }
-
-  function openDisplay(b) {
-    const node = openPopover(b, displayHTML(), { className: 'disp-pop', role: 'dialog', label: '显示设置', trapTab: true, alignRight: true, focus: '[role="radio"][aria-checked="true"]' });
-    node.addEventListener('click', (e) => {
-      const t = e.target.closest('[data-disp]');
-      if (!t || t.disabled) return;
-      const k = t.dataset.disp;
-      if (k === 'size') display.size = Math.max(SIZE_MIN, Math.min(SIZE_MAX, display.size + Number(t.dataset.v)));
-      else if (k === 'focus' || k === 'gutter') display[k] = !display[k];
-      else if (k === 'reset') Object.assign(display, DISPLAY_DEFAULT);
-      else display[k] = t.dataset.v;
-      applyDisplay();
-      save();
-      const sel = `[data-disp="${k}"]${t.dataset.v ? `[data-v="${t.dataset.v}"]` : ''}`;
-      node.innerHTML = displayHTML();
-      const again = $(sel, node);
-      (again && !again.disabled ? again : $('[role="radio"][aria-checked="true"]', node)).focus({ preventScroll: true });
-    });
-  }
-
   el.content.addEventListener('focusin', (e) => {
-    if (e.target.id === 'title-input') { ui.sel = null; syncFormatBar(); }
+    if (e.target.id === 'title-input') { ui.sel = null; paintGhost(); syncFormatBar(); }
   });
 
   function setMode(mode) {
@@ -2952,7 +3894,6 @@ kbd {
     el.content.innerHTML = `<div class="empty full">
       <div class="glyph">${icon('i-doc')}</div>
       <h3>还没有文章</h3>
-      <p>新建一篇，先专心把话写下来。写完一轮后，再标记想请 AI 修改的段落。</p>
       <button type="button" class="btn primary" id="empty-new" style="margin-top:6px">${icon('i-compose', 'sm')}新建文章</button>
     </div>`;
     $('#empty-new').addEventListener('click', newArticle);
@@ -2962,16 +3903,10 @@ kbd {
 
   function renderWrite(a) {
     const round = S.activeRound(a);
-    let banner = '';
-    if (round && round.status === 'running') {
-      banner = `<div class="banner"><div class="banner-inner" role="status"><span class="spinner" aria-hidden="true"></span><span class="grow">AI 正在按标记改稿（本地模拟），改完前正文暂不能编辑。</span><button type="button" class="btn" data-act="cancel-run">取消改稿</button></div></div>`;
-    } else if (round && round.status === 'pending') {
-      banner = `<div class="banner"><div class="banner-inner">${icon('i-revise')}<span class="grow">第 ${round.n} 轮改稿已返回。审阅完成前，正文保持送审时的样子。</span><button type="button" class="btn primary" data-act="go-review">开始审阅</button></div></div>`;
-    }
-    el.content.innerHTML = `${banner}
+    el.content.innerHTML = `
       <div class="page">
-        <textarea class="title-input" id="title-input" rows="1" placeholder="无标题" aria-label="标题" ${round ? 'readonly' : ''}>${esc(a.title)}</textarea>
         <div class="meta-line" id="meta-line"></div>
+        <textarea class="title-input" id="title-input" rows="1" placeholder="标题" aria-label="标题" ${round ? 'readonly' : ''}>${esc(a.title)}</textarea>
         <div class="editor-wrap" id="editor-wrap">
           <div class="editor" id="editor" contenteditable="${round ? 'false' : 'true'}" role="textbox" aria-multiline="true" aria-label="正文" spellcheck="true" ${round ? 'aria-readonly="true"' : ''}></div>
           <div class="gutter" id="gutter"></div>
@@ -2988,8 +3923,10 @@ kbd {
     const a = current();
     const m = $('#meta-line');
     if (!a || !m) return;
-    const n = a.paragraphs.filter((p) => p.text.trim()).length;
-    m.innerHTML = `<span>${fmt(a.updatedAt)}</span><span>${n} 段</span><span>${charCount(a.paragraphs)} 字</span>${a.versions.length ? `<span>${a.versions.length} 个版本</span>` : ''}`;
+    const r = S.activeRound(a);
+    const state = r ? `<span class="locked">${icon('i-lock', 'xs')}${r.status === 'running' ? '改稿中' : '待审阅'}</span>` : '';
+    const html = `<time>${fmt(a.updatedAt)}</time>${state}`;
+    if (m.innerHTML !== html) m.innerHTML = html;
   }
 
   function autosizeTitle() {
@@ -3001,12 +3938,19 @@ kbd {
 
   const editorEl = () => $('#editor');
 
+  function paraOpen(p, nums) {
+    const n = nums.get(p.id);
+    return `<p data-pid="${p.id}" class="${R.blockClass(p)}"${n ? ` data-num="${n}"` : ''}>`;
+  }
+
   function renderEditorParas() {
     const a = current();
     const ed = editorEl();
     if (!a || !ed) return;
-    ed.innerHTML = a.paragraphs.map((p) => `<p data-pid="${p.id}">${p.text ? esc(p.text) : '<br>'}</p>`).join('');
+    const nums = R.numbering(a.paragraphs);
+    ed.innerHTML = a.paragraphs.map((p) => `${paraOpen(p, nums)}${R.inlineHTML(p.text, p.runs) || '<br>'}</p>`).join('');
     updateDecor();
+    if (document.activeElement !== ed) paintGhost();
   }
 
   function updateDecor() {
@@ -3015,16 +3959,13 @@ kbd {
     if (!a || !ed) return;
     const only = a.paragraphs.length === 1;
     const run = ui.running && ui.running.articleId === a.id ? ui.running : null;
-    const cur = ui.caret && ui.caret.pid;
-    ed.classList.toggle('has-current', Boolean(cur && a.paragraphs.some((p) => p.id === cur)));
     $$('p', ed).forEach((p) => {
       const pid = p.dataset.pid;
-      const text = p.textContent;
-      p.classList.toggle('is-current', pid === cur);
+      const empty = !p.textContent;
       p.classList.toggle('is-marked', Boolean(a.marks[pid]));
-      p.classList.toggle('is-empty', !text);
+      p.classList.toggle('is-empty', empty);
       p.classList.toggle('is-revising', Boolean(run && run.current === pid));
-      if (!text && only) p.dataset.placeholder = '从第一句话开始写。写完一轮后，标记想请 AI 修改的段落。';
+      if (empty && only && p.classList.contains('t-p')) p.dataset.placeholder = '开始写作';
       else delete p.dataset.placeholder;
     });
     renderGutter();
@@ -3041,33 +3982,22 @@ kbd {
     $$('p', ed).forEach((p) => {
       const pid = p.dataset.pid;
       const mark = a.marks[pid];
-      const top = p.offsetTop + (mark ? 8 : 0) + 3;
-      const show = !locked && (ui.hoverPid === pid || (ui.caret && ui.caret.pid === pid));
-      html.push(`<div class="g-item ${mark ? 'marked' : ''} ${show ? 'show' : ''}" data-pid="${pid}" style="top:${top}px">
-        ${locked ? '' : `<button type="button" class="g-btn g-handle" data-drag="${pid}" tabindex="-1" aria-hidden="true" title="拖动以移动段落（${K.alt}${K.shift}${K.up}/${K.down}）">${icon('i-grip', 'sm')}</button>`}
-        <button type="button" class="g-btn g-mark" data-mark="${pid}" tabindex="-1" aria-hidden="true" ${locked ? 'disabled' : ''} title="${mark ? '取消标记' : '标记给 AI 修改'}（${K.mod}${K.shift}M）">${icon(mark ? 'i-mark-on' : 'i-mark', 'sm')}</button>
-      </div>`);
+      if (!locked) {
+        const show = ui.hoverPid === pid;
+        const lineTop = p.offsetTop + Math.max(0, (parseFloat(getComputedStyle(p).lineHeight) || 30) / 2 - 13);
+        html.push(`<div class="g-item ${show ? 'show' : ''}" data-pid="${pid}" style="top:${lineTop}px"><button type="button" class="g-btn g-handle" data-drag="${pid}" tabindex="-1" aria-hidden="true" title="拖动以移动段落">${icon('i-grip', 'sm')}</button></div>`);
+      }
       if (mark) {
-        let state = '';
-        if (run) {
-          const st = run.status[pid];
-          state = st === 'run' ? '正在改稿…' : st === 'done' ? '已改完' : '等待中';
-        }
-        const chipTop = p.offsetTop + p.offsetHeight - 30;
-        html.push(`<button type="button" class="g-chip" data-chip="${pid}" tabindex="-1" aria-hidden="true" style="top:${chipTop}px;left:0" ${locked ? 'disabled' : ''}>
-          ${icon('i-revise')}${esc(S.instructionLabel(mark))}${state ? `<span class="state">· ${state}</span>` : icon('i-chevron-down')}</button>`);
+        const st = run ? run.status[pid] : '';
+        const tip = `${S.instructionLabel(mark)}${st === 'run' ? ' · 改稿中' : st === 'done' ? ' · 已改完' : ''}`;
+        html.push(`<button type="button" class="g-bar ${st ? `is-${st}` : ''}" data-chip="${pid}" tabindex="-1" aria-hidden="true" title="${esc(tip)}" style="top:${p.offsetTop}px;height:${p.offsetHeight}px" ${locked ? 'disabled' : ''}></button>`);
       }
     });
     g.innerHTML = html.join('');
   }
 
   function refreshGutterVisibility() {
-    const a = current();
-    const locked = isLocked(a);
-    $$('.g-item').forEach((it) => {
-      const pid = it.dataset.pid;
-      it.classList.toggle('show', !locked && (ui.hoverPid === pid || (ui.caret && ui.caret.pid === pid)));
-    });
+    $$('.g-item').forEach((it) => it.classList.toggle('show', ui.hoverPid === it.dataset.pid));
   }
 
   const edResize = new ResizeObserver(() => renderGutter());
@@ -3198,9 +4128,28 @@ kbd {
     el.content.scrollTop = prevScroll;
   }
 
-  /* —— DOM → 段落模型同步（输入法组字期间不同步，确认上屏后再同步）—— */
+  /* —— DOM → 段落模型同步（输入法组字期间不同步，确认上屏后再同步）——
+   * 每段都读回文字和本编辑器自己的字符样式；读回的结果若与规范 HTML 不同（浏览器自行插入了样式或结构），就按模型重绘。
+   */
 
   let composing = false;
+  let pending = null;
+  let pendingBeforeInput = null;
+
+  /** 光标处待用的字符样式：在光标处点了粗体等按钮、但还没输入文字时保存在这里。 */
+  function pendingFor(c) {
+    return c && c.collapsed && pending && pending.pid === c.pid && pending.offset === c.offset ? pending.patch : null;
+  }
+
+  function desiredAttrs(op, off, extra) {
+    const want = { ...R.attrsAt(op, off) };
+    if (extra) for (const k of Object.keys(extra)) { if (extra[k]) want[k] = extra[k]; else delete want[k]; }
+    const change = {};
+    for (const k of R.INLINE) change[k] = want[k] || null;
+    return change;
+  }
+
+  const AUTO_BLOCK = /^(?:([-*•])|(1[.)])|(#{1,3})) /;
 
   function syncFromDOM() {
     const a = current();
@@ -3210,43 +4159,78 @@ kbd {
     let caretIdx = -1;
     let caretOff = 0;
     const caret = getCaret();
+    const prevById = new Map(a.paragraphs.map((p) => [p.id, p]));
     const out = [];
     const seen = new Set();
     let structural = false;
     for (const node of Array.from(ed.childNodes)) {
       if (node.nodeType === 3) {
-        if (!node.data) continue;
+        const t = node.data.replace(/\u200b/g, '');
+        if (!t) continue;
         structural = true;
-        if (out.length) out[out.length - 1].text += node.data;
-        else out.push({ id: S.uid('p'), text: node.data });
+        if (out.length) R.append(out[out.length - 1], t);
+        else out.push({ id: S.uid('p'), text: t });
         continue;
       }
       if (node.nodeType !== 1) continue;
       if (node.tagName !== 'P') structural = true;
-      let id = node.dataset && node.dataset.pid;
+      const srcId = node.dataset && node.dataset.pid;
+      let id = srcId;
       if (!id || seen.has(id)) { id = S.uid('p'); structural = true; }
       seen.add(id);
-      if (node.querySelector('*:not(br)')) structural = true;
       if (sel && sel.rangeCount && node.contains(sel.getRangeAt(0).startContainer)) {
         caretIdx = out.length;
         caretOff = offsetIn(node, sel.getRangeAt(0).startContainer, sel.getRangeAt(0).startOffset);
       }
-      out.push({ id, text: node.textContent.replace(/\u200b/g, '') });
+      const { text, runs } = R.parseInline(node);
+      const prev = prevById.get(srcId);
+      const para = { id, text, ...(prev ? R.blockOf(prev) : {}) };
+      R.setRuns(para, runs);
+      if (node.tagName === 'P' && node.innerHTML !== (R.inlineHTML(para.text, para.runs) || '<br>')) structural = true;
+      out.push(para);
     }
-    if (!out.length) { out.push({ id: (a.paragraphs[0] && a.paragraphs[0].id) || S.uid('p'), text: '' }); structural = true; caretIdx = 0; }
-    const changed = out.length !== a.paragraphs.length || out.some((p, i) => p.id !== a.paragraphs[i].id || p.text !== a.paragraphs[i].text);
+    if (!out.length) { out.push({ id: (a.paragraphs[0] && a.paragraphs[0].id) || S.uid('p'), text: '', ...(a.paragraphs[0] ? R.blockOf(a.paragraphs[0]) : {}) }); structural = true; caretIdx = 0; }
+
+    const before = caretBeforeInput;
+    if (before && before.collapsed && caretIdx >= 0) {
+      const np = out[caretIdx];
+      const op = prevById.get(np.id);
+      const d = op ? np.text.length - op.text.length : 0;
+      const off = before.offset;
+      if (op && np.id === before.pid && d > 0 && np.text.slice(0, off) === op.text.slice(0, off) && np.text.slice(off + d) === op.text.slice(off)) {
+        const was = JSON.stringify(np.runs || null);
+        R.patch(np, off, off + d, desiredAttrs(op, off, pendingBeforeInput));
+        if (JSON.stringify(np.runs || null) !== was) structural = true;
+      }
+    }
+
+    const sig = (p) => `${p.id}\u0001${p.text}\u0001${JSON.stringify(p.runs || null)}`;
+    const changed = out.length !== a.paragraphs.length || out.some((p, i) => sig(p) !== sig(a.paragraphs[i]));
     if (changed) {
       const now = Date.now();
       if (lastUndoKind !== 'typing' || now - lastTypingAt > 1500) pushUndo('输入', { kind: 'typing', caret: caretBeforeInput || caret });
       lastTypingAt = now;
       a.paragraphs = out;
+      pending = null;
       for (const pid of Object.keys(a.marks)) if (!out.some((p) => p.id === pid)) delete a.marks[pid];
+
+      const np = caretIdx >= 0 ? out[caretIdx] : null;
+      const m = np && before && before.collapsed && before.pid === np.id && R.typeOf(np) === 'p' ? AUTO_BLOCK.exec(np.text) : null;
+      if (m && caretOff === m[0].length && before.offset === m[0].length - 1) {
+        const type = m[1] ? 'ul' : m[2] ? 'ol' : ['h1', 'h2', 'h3'][m[3].length - 1];
+        pushUndo(type === 'ul' ? '项目符号' : type === 'ol' ? '编号列表' : '段落样式', { caret: { pid: np.id, offset: caretOff, endPid: np.id, endOffset: caretOff, collapsed: true } });
+        lastUndoKind = null;
+        R.remove(np, 0, m[0].length);
+        R.setBlock(np, { type });
+        caretOff = 0;
+        structural = true;
+      }
       touch(a);
     }
     if (structural) {
       renderEditorParas();
       const target = out[Math.max(0, caretIdx)] || out[0];
-      setCaret(target.id, caretIdx >= 0 ? caretOff : 0);
+      setCaret(target.id, caretIdx >= 0 ? Math.min(caretOff, target.text.length) : 0);
     } else if (changed) {
       updateDecor();
     }
@@ -3256,12 +4240,20 @@ kbd {
   let afterTimer = 0;
   function afterTextChange() {
     renderMeta();
+    queueSyncFormatBar();
     clearTimeout(afterTimer);
     afterTimer = setTimeout(() => {
       renderSidebar();
       renderToolbar();
       if (inspectorVisible()) renderInspector();
     }, 160);
+  }
+
+  function rerender(caretPid, offset) {
+    touch(current());
+    renderEditorParas();
+    setCaret(caretPid, offset);
+    afterTextChange();
   }
 
   function deleteSelectionModel(c) {
@@ -3271,70 +4263,314 @@ kbd {
     if (i1 < 0 || i2 < 0) return c;
     const first = a.paragraphs[i1];
     if (i1 === i2) {
-      first.text = first.text.slice(0, c.offset) + first.text.slice(c.endOffset);
+      R.remove(first, c.offset, c.endOffset);
     } else {
       const last = a.paragraphs[i2];
-      first.text = first.text.slice(0, c.offset) + last.text.slice(c.endOffset);
+      R.cut(first, c.offset);
+      const tail = R.cut(last, c.endOffset);
+      R.append(first, tail.text, tail.runs);
       const removed = a.paragraphs.splice(i1 + 1, i2 - i1);
       for (const p of removed) delete a.marks[p.id];
     }
     return { pid: c.pid, offset: c.offset, endPid: c.pid, endOffset: c.offset, collapsed: true };
   }
 
+  const LIST_LIKE = new Set(['ul', 'ol', 'quote']);
+
   function splitAtCaret() {
     const a = current();
     let c = getCaret();
     if (!a || !c) return;
+    const pend = pendingFor(c);
+    const idx0 = a.paragraphs.findIndex((p) => p.id === c.pid);
+    const p0 = a.paragraphs[idx0];
+    if (c.collapsed && !p0.text && LIST_LIKE.has(R.typeOf(p0))) {
+      pushUndo('段落样式', { caret: c });
+      R.setBlock(p0, { type: 'p', indent: 0 });
+      rerender(p0.id, 0);
+      return;
+    }
     pushUndo('分段', { caret: c });
     if (!c.collapsed) c = deleteSelectionModel(c);
     const idx = a.paragraphs.findIndex((p) => p.id === c.pid);
     const p = a.paragraphs[idx];
+    const block = R.blockOf(p);
+    const after = { ...block };
+    if (/^h[1-3]$/.test(R.typeOf(p))) delete after.type;
     let caretPid;
+    pending = null;
     if (c.offset === 0 && p.text.length > 0) {
-      a.paragraphs.splice(idx, 0, { id: S.uid('p'), text: '' });
+      a.paragraphs.splice(idx, 0, { id: S.uid('p'), text: '', ...block });
       caretPid = p.id;
+      if (pend) pending = { pid: p.id, offset: 0, patch: pend };
     } else {
-      const np = { id: S.uid('p'), text: p.text.slice(c.offset) };
-      p.text = p.text.slice(0, c.offset);
+      const right = R.cut(p, c.offset);
+      const np = { id: S.uid('p'), text: right.text, ...(right.text ? block : after) };
+      R.setRuns(np, right.runs);
       a.paragraphs.splice(idx + 1, 0, np);
       caretPid = np.id;
+      if (!right.text) {
+        const patch = desiredAttrs(p, c.offset, pend);
+        if (Object.values(patch).some(Boolean)) pending = { pid: np.id, offset: 0, patch };
+      }
     }
-    touch(a);
-    renderEditorParas();
-    setCaret(caretPid, 0);
-    afterTextChange();
+    rerender(caretPid, 0);
   }
 
-  function pasteText(text) {
+  /** 段首退格：先去掉列表或引用，再减少缩进，最后与上一段合并。 */
+  function backspaceAtStart(c) {
     const a = current();
-    let c = getCaret();
-    if (!a || !c) return;
-    const lines = text.replace(/\r\n?/g, '\n').split('\n').map((l) => l.replace(/\t/g, ' ')).filter((l) => l.trim());
-    if (!lines.length) return;
-    pushUndo('粘贴', { caret: c });
+    const idx = a.paragraphs.findIndex((p) => p.id === c.pid);
+    const p = a.paragraphs[idx];
+    const b = R.blockOf(p);
+    if (LIST_LIKE.has(R.typeOf(p))) {
+      pushUndo('段落样式', { caret: c });
+      R.setBlock(p, { type: 'p' });
+      rerender(p.id, 0);
+      return;
+    }
+    if (b.indent) {
+      pushUndo('缩进', { caret: c });
+      R.setBlock(p, { indent: b.indent - 1 });
+      rerender(p.id, 0);
+      return;
+    }
+    if (idx <= 0) return;
+    const prev = a.paragraphs[idx - 1];
+    pushUndo('合并段落', { caret: c });
+    if (!prev.text) {
+      a.paragraphs.splice(idx - 1, 1);
+      delete a.marks[prev.id];
+      rerender(p.id, 0);
+      return;
+    }
+    const off = prev.text.length;
+    R.append(prev, p.text, R.runsOf(p));
+    a.paragraphs.splice(idx, 1);
+    delete a.marks[p.id];
+    rerender(prev.id, off);
+  }
+
+  function deleteAtEnd(c) {
+    const a = current();
+    const idx = a.paragraphs.findIndex((p) => p.id === c.pid);
+    const p = a.paragraphs[idx];
+    const next = a.paragraphs[idx + 1];
+    if (!next) return;
+    pushUndo('合并段落', { caret: c });
+    if (!p.text) {
+      a.paragraphs.splice(idx, 1);
+      delete a.marks[p.id];
+      rerender(next.id, 0);
+      return;
+    }
+    const off = p.text.length;
+    R.append(p, next.text, R.runsOf(next));
+    a.paragraphs.splice(idx + 1, 1);
+    delete a.marks[next.id];
+    rerender(p.id, off);
+  }
+
+  /** 选区内容，按段落切开，带段落样式和字符样式。 */
+  function selectionBlocks(a, c) {
+    const i1 = a.paragraphs.findIndex((p) => p.id === c.pid);
+    const i2 = a.paragraphs.findIndex((p) => p.id === c.endPid);
+    const out = [];
+    if (i1 < 0 || i2 < 0) return out;
+    for (let i = i1; i <= i2; i++) {
+      const p = a.paragraphs[i];
+      const s = i === i1 ? c.offset : 0;
+      const e = i === i2 ? c.endOffset : p.text.length;
+      if (i === i2 && i > i1 && e === 0) break;
+      out.push({ text: p.text.slice(s, e), runs: R.slice(R.runsOf(p), s, e), ...R.blockOf(p) });
+    }
+    return out;
+  }
+
+  /** 插入一组段落。plain 为真时文字沿用光标处的样式；否则保留来源的字符样式，多段时也保留段落样式。 */
+  function insertBlocks(blocks, plain, label = '粘贴') {
+    const a = current();
+    let c = getCaret() || editSel();
+    if (!a || !c || !blocks.length || isLocked(a)) return;
+    pushUndo(label, { caret: c });
+    const pend = pendingFor(c);
     if (!c.collapsed) c = deleteSelectionModel(c);
     const idx = a.paragraphs.findIndex((p) => p.id === c.pid);
     const p = a.paragraphs[idx];
-    const left = p.text.slice(0, c.offset);
-    const right = p.text.slice(c.offset);
-    if (lines.length === 1) {
-      p.text = left + lines[0] + right;
-      touch(a);
-      renderEditorParas();
-      setCaret(p.id, left.length + lines[0].length);
-    } else {
-      p.text = left + lines[0];
-      const added = lines.slice(1).map((l) => ({ id: S.uid('p'), text: l }));
-      const last = added[added.length - 1];
-      const caretOff = last.text.length;
-      last.text += right;
-      a.paragraphs.splice(idx + 1, 0, ...added);
-      touch(a);
-      renderEditorParas();
-      setCaret(last.id, caretOff);
+    const off = c.offset;
+    const here = desiredAttrs(p, off, pend);
+    const base = Object.fromEntries(Object.entries(here).filter(([, v]) => v));
+    const runsFor = (b) => (plain || !b.runs || !b.runs.length ? [{ n: b.text.length, ...base }] : b.runs);
+    pending = null;
+    if (blocks.length === 1) {
+      R.insert(p, off, blocks[0].text, runsFor(blocks[0]));
+      lastUndoKind = 'paste';
+      rerender(p.id, off + blocks[0].text.length);
+      return;
     }
+    const wasEmpty = !p.text;
+    const right = R.cut(p, off);
+    const first = blocks[0];
+    R.append(p, first.text, runsFor(first));
+    if (wasEmpty && !plain) R.setBlock(p, R.blockOf(first));
+    const inherit = LIST_LIKE.has(R.typeOf(p)) ? R.blockOf(p) : {};
+    const added = blocks.slice(1).map((b) => {
+      const np = { id: S.uid('p'), text: b.text, ...(plain ? inherit : R.blockOf(b)) };
+      return R.setRuns(np, runsFor(b));
+    });
+    const last = added[added.length - 1];
+    const caretOff = last.text.length;
+    R.append(last, right.text, right.runs);
+    a.paragraphs.splice(idx + 1, 0, ...added);
     lastUndoKind = 'paste';
+    rerender(last.id, caretOff);
+  }
+
+  /* —— 排版命令：字符样式作用于选区，光标处则记为待用样式；段落样式作用于选区涉及的所有段落 —— */
+
+  function editTarget() {
+    const a = current();
+    if (!a || isLocked(a) || ui.view !== 'article' || ui.mode !== 'write') return null;
+    const c = editSel();
+    return c ? { a, c } : null;
+  }
+
+  function inlineRanges(a, c) {
+    const i1 = a.paragraphs.findIndex((p) => p.id === c.pid);
+    const i2 = a.paragraphs.findIndex((p) => p.id === (c.endPid || c.pid));
+    const out = [];
+    if (i1 < 0 || i2 < i1) return out;
+    for (let i = i1; i <= i2; i++) {
+      const p = a.paragraphs[i];
+      const s = i === i1 ? c.offset : 0;
+      const e = i === i2 ? c.endOffset : p.text.length;
+      if (e > s) out.push({ p, s, e });
+    }
+    return out;
+  }
+
+  function commitFormat(a, c) {
+    touch(a);
+    const focused = document.activeElement === editorEl();
+    renderEditorParas();
+    if (focused) restoreSel(c);
+    else {
+      const s = window.getSelection();
+      if (s) s.removeAllRanges();
+      ui.sel = c;
+      paintGhost();
+    }
+    syncFormatBar();
     afterTextChange();
+  }
+
+  const INLINE_LABEL = { b: '粗体', i: '斜体', u: '下划线', s: '删除线' };
+
+  function formatInline(change, label) {
+    const t = editTarget();
+    if (!t) return;
+    const { a, c } = t;
+    const ranges = c.collapsed ? [] : inlineRanges(a, c);
+    if (!ranges.length) {
+      pending = { pid: c.pid, offset: c.offset, patch: { ...(pendingFor(c) || {}), ...change } };
+      syncFormatBar();
+      return;
+    }
+    const before = JSON.stringify(ranges.map((r) => r.p.runs || null));
+    const trial = ranges.map((r) => R.patch(R.clonePara(r.p), r.s, r.e, change).runs || null);
+    if (JSON.stringify(trial) === before) return;
+    pushUndo(label, { caret: c });
+    for (const r of ranges) R.patch(r.p, r.s, r.e, change);
+    commitFormat(a, c);
+  }
+
+  function toggleInline(k) {
+    const s = fbState();
+    if (!s) return;
+    formatInline({ [k]: s.st[k] === true ? null : true }, INLINE_LABEL[k]);
+    announce(`${INLINE_LABEL[k]}${s.st[k] === true ? '已关闭' : '已打开'}`);
+  }
+
+  function setSize(z) {
+    const t = editTarget();
+    if (!t) return;
+    const { a, c } = t;
+    const ranges = c.collapsed ? [] : inlineRanges(a, c);
+    if (!ranges.length) {
+      const p = a.paragraphs.find((x) => x.id === c.pid);
+      formatInline({ z: z === R.defaultSize(p) ? null : z }, '字号');
+      return;
+    }
+    pushUndo('字号', { caret: c });
+    for (const r of ranges) R.patch(r.p, r.s, r.e, { z: z === R.defaultSize(r.p) ? null : z });
+    commitFormat(a, c);
+  }
+
+  function stepSize(d) {
+    const s = fbState();
+    if (!s) return;
+    let z = s.st.z;
+    if (z === null) {
+      const p = s.a.paragraphs.find((x) => x.id === s.c.pid);
+      z = R.charAttrs(R.runsOf(p), s.c.offset).z || R.defaultSize(p);
+    }
+    const next = d > 0 ? R.SIZES.find((v) => v > z) : [...R.SIZES].reverse().find((v) => v < z);
+    if (next) setSize(next);
+  }
+
+  function clearFormat() {
+    formatInline(Object.fromEntries(R.INLINE.map((k) => [k, null])), '清除格式');
+  }
+
+  function formatBlocks(label, changeFor) {
+    const t = editTarget();
+    if (!t) return;
+    const { a, c } = t;
+    const paras = selectedPids(a, c).map((id) => a.paragraphs.find((p) => p.id === id));
+    const differs = paras.some((p) => JSON.stringify(R.blockOf(R.setBlock(R.clonePara(p), changeFor(p)))) !== JSON.stringify(R.blockOf(p)));
+    if (!differs) return;
+    pushUndo(label, { caret: c });
+    for (const p of paras) R.setBlock(p, changeFor(p));
+    commitFormat(a, c);
+  }
+
+  function setBlockType(type) {
+    formatBlocks('段落样式', () => ({ type }));
+    announce(`样式：${R.BLOCK[type].label}`);
+  }
+
+  function toggleList(type) {
+    const s = fbState();
+    if (!s) return;
+    const all = s.st.type === type;
+    formatBlocks(R.BLOCK[type].label, () => ({ type: all ? 'p' : type }));
+    announce(all ? `已取消${R.BLOCK[type].label}` : R.BLOCK[type].label);
+  }
+
+  function indentBlocks(d) {
+    formatBlocks(d > 0 ? '增加缩进' : '减少缩进', (p) => ({ indent: Math.max(0, Math.min(R.INDENT_MAX, (R.blockOf(p).indent || 0) + d)) }));
+  }
+
+  function setAlign(align) {
+    formatBlocks('对齐', () => ({ align }));
+    announce(R.ALIGNS.find((x) => x.id === align).label);
+  }
+
+  function setLineHeight(lh) {
+    formatBlocks('行距', () => ({ lh }));
+  }
+
+  /** 焦点离开正文（进入工具栏、菜单或对话框）时，用淡色把刚才的选区标出来。 */
+  function paintGhost() {
+    const ed = editorEl();
+    const a = current();
+    if (!ed || !a || ui.mode !== 'write' || document.activeElement === ed || !ui.sel || ui.sel.collapsed) { clearHighlight('ghost'); return; }
+    const ranges = inlineRanges(a, ui.sel).map((r) => {
+      const node = ed.querySelector(`p[data-pid="${CSS.escape(r.p.id)}"]`);
+      return node ? rangeIn(node, r.s, r.e) : null;
+    }).filter(Boolean);
+    if (ranges.length) setHighlight('ghost', ranges);
+    else clearHighlight('ghost');
   }
 
   function moveParagraph(pid, toIndex, via) {
@@ -3463,9 +4699,9 @@ kbd {
     const a = current();
     const mark = a.marks[pid];
     const items = [
-      { label: '想怎样修改这一段', heading: true },
+      { label: '修改要求', heading: true },
       ...AI.INSTRUCTIONS.map((it) => ({ label: it.label, checked: !mark.custom && mark.instruction === it.id, run: () => setInstruction(pid, it.id) })),
-      { label: mark.custom ? `自定义：${clip(mark.custom, 10)}` : '自定义要求…', checked: Boolean(mark.custom), run: () => customInstruction(pid) },
+      { label: mark.custom ? `自定义：${clip(mark.custom, 10)}` : '自定义…', checked: Boolean(mark.custom), run: () => customInstruction(pid) },
       '-',
       { label: '取消标记', icon: 'i-x', run: () => toggleMark(pid, false) },
     ];
@@ -3477,9 +4713,8 @@ kbd {
     const pids = [].concat(pidOrPids);
     const mark = a.marks[pids[0]] || {};
     openDialog({
-      title: '自定义修改要求',
-      body: `<p>用一句话告诉 AI 你希望${pids.length > 1 ? `这 ${pids.length} 段` : '这一段'}怎样改。原型里的模拟服务不会理解这句话：示例段落仍使用预置改法，其他段落只做简单规则精简。</p>
-        <div class="field"><input type="text" value="${esc(mark.custom || '')}" placeholder="例如：保留口语感，只删重复的词" aria-label="修改要求"></div>`,
+      title: '修改要求',
+      body: `<div class="field"><input type="text" value="${esc(mark.custom || '')}" placeholder="例如：保留口语感，只删重复的词" aria-label="修改要求"></div>`,
       actions: [{ label: '取消', value: null }, { label: '确定', value: 'ok', primary: true }],
       onClose: (v, text) => {
         if (v === 'ok' && text && text.trim()) applyMarks(pids, 'custom', text.trim());
@@ -3489,25 +4724,55 @@ kbd {
 
   /* —— 编辑器事件 —— */
 
+  const FORMAT_INPUT = { formatBold: 'b', formatItalic: 'i', formatUnderline: 'u', formatStrikeThrough: 's' };
+
   el.content.addEventListener('beforeinput', (e) => {
     const ed = editorEl();
     if (!ed || !ed.contains(e.target)) return;
     if (!ed.isContentEditable) { e.preventDefault(); return; }
-    caretBeforeInput = getCaret();
+    const c = getCaret();
+    caretBeforeInput = c;
+    pendingBeforeInput = pendingFor(c);
     const t = e.inputType;
     if (t === 'historyUndo') { e.preventDefault(); undo(); return; }
     if (t === 'historyRedo') { e.preventDefault(); redo(); return; }
-    if (t === 'insertParagraph' || t === 'insertLineBreak') {
-      if (composing || e.isComposing) return;
-      e.preventDefault();
-      splitAtCaret();
-      return;
-    }
-    if (t && t.startsWith('format')) e.preventDefault();
+    if (FORMAT_INPUT[t]) { e.preventDefault(); toggleInline(FORMAT_INPUT[t]); return; }
+    if (t && t.startsWith('format')) { e.preventDefault(); return; }
+    if (composing || e.isComposing || !c) return;
+    if (t === 'insertParagraph' || t === 'insertLineBreak') { e.preventDefault(); splitAtCaret(); return; }
     if (t === 'insertFromDrop') {
       e.preventDefault();
-      const text = e.dataTransfer && e.dataTransfer.getData('text/plain');
-      if (text) pasteText(text);
+      const dt = e.dataTransfer;
+      const html = dt && dt.getData('text/html');
+      const blocks = (html && R.fromHTML(html)) || [];
+      insertBlocks(blocks.length ? blocks : R.fromPlain(dt && dt.getData('text/plain')), !blocks.length, '拖入文字');
+      return;
+    }
+    const multi = !c.collapsed && c.pid !== c.endPid;
+    if (t.startsWith('delete')) {
+      if (multi) {
+        e.preventDefault();
+        pushUndo('删除', { caret: c });
+        const n = deleteSelectionModel(c);
+        rerender(n.pid, n.offset);
+        return;
+      }
+      if (c.collapsed && /Backward$/.test(t) && c.offset === 0) { e.preventDefault(); backspaceAtStart(c); return; }
+      if (c.collapsed && /Forward$/.test(t)) {
+        const p = current().paragraphs.find((x) => x.id === c.pid);
+        if (p && c.offset >= p.text.length) { e.preventDefault(); deleteAtEnd(c); }
+      }
+      return;
+    }
+    if (multi && (t === 'insertText' || t === 'insertReplacementText') && e.data) {
+      e.preventDefault();
+      const a = current();
+      pushUndo('输入', { caret: c, kind: 'typing' });
+      lastTypingAt = Date.now();
+      const n = deleteSelectionModel(c);
+      const p = a.paragraphs.find((x) => x.id === n.pid);
+      R.insert(p, n.offset, e.data, R.attrsAt(p, n.offset));
+      rerender(p.id, n.offset + e.data.length);
     }
   });
   el.content.addEventListener('input', (e) => {
@@ -3526,19 +4791,94 @@ kbd {
     syncFromDOM();
   });
   el.content.addEventListener('compositionstart', (e) => {
-    if (editorEl() && editorEl().contains(e.target)) { composing = true; caretBeforeInput = getCaret(); }
+    if (editorEl() && editorEl().contains(e.target)) {
+      composing = true;
+      caretBeforeInput = getCaret();
+      pendingBeforeInput = pendingFor(caretBeforeInput);
+    }
   });
   el.content.addEventListener('compositionend', (e) => {
     if (editorEl() && editorEl().contains(e.target)) { composing = false; syncFromDOM(); }
+  });
+
+  /* —— 剪贴板：复制时同时写入纯文本和带排版的 HTML；粘贴时优先读排版，⇧ 粘贴只取文字 —— */
+
+  let plainPasteNext = false;
+  function editorSelection() {
+    const c = getCaret();
+    return c && !c.collapsed ? c : null;
+  }
+  function writeClipboard(e, c) {
+    const blocks = selectionBlocks(current(), c);
+    e.clipboardData.setData('text/plain', blocks.map((b) => b.text).join('\n'));
+    e.clipboardData.setData('text/html', R.clipboardHTML(blocks));
+  }
+  el.content.addEventListener('copy', (e) => {
+    const ed = editorEl();
+    if (!ed || !ed.contains(e.target)) return;
+    const c = editorSelection();
+    if (!c) return;
+    e.preventDefault();
+    writeClipboard(e, c);
+  });
+  el.content.addEventListener('cut', (e) => {
+    const ed = editorEl();
+    if (!ed || !ed.contains(e.target)) return;
+    const c = editorSelection();
+    if (!c) return;
+    e.preventDefault();
+    writeClipboard(e, c);
+    if (!ed.isContentEditable) return;
+    pushUndo('剪切', { caret: c });
+    const n = deleteSelectionModel(c);
+    rerender(n.pid, n.offset);
   });
   el.content.addEventListener('paste', (e) => {
     const ed = editorEl();
     if (!ed || !ed.contains(e.target)) return;
     e.preventDefault();
+    const plain = plainPasteNext;
+    plainPasteNext = false;
     if (!ed.isContentEditable) return;
-    const text = e.clipboardData && e.clipboardData.getData('text/plain');
-    if (text) pasteText(text);
+    const cd = e.clipboardData;
+    const html = !plain && cd && cd.getData('text/html');
+    const rich = html ? R.fromHTML(html) : [];
+    const blocks = rich.length ? rich : R.fromPlain(cd && cd.getData('text/plain'));
+    if (blocks.length) insertBlocks(blocks, !rich.length);
   });
+
+  /* —— 编辑器里的键盘：段落移动、列表缩进、排版快捷键 —— */
+
+  function formatShortcut(e) {
+    const mod = isMac ? e.metaKey : e.ctrlKey;
+    if (!mod) return false;
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const code = e.code;
+    const run = (fn) => { e.preventDefault(); fn(); return true; };
+    if (e.altKey && !e.shiftKey && /^Digit[0-3]$/.test(code)) return run(() => setBlockType(['p', 'h1', 'h2', 'h3'][Number(code.slice(5))]));
+    if (e.altKey) return false;
+    if (!e.shiftKey) {
+      if (k === 'b') return run(() => toggleInline('b'));
+      if (k === 'i') return run(() => toggleInline('i'));
+      if (k === 'u') return run(() => toggleInline('u'));
+      if (code === 'BracketRight') return run(() => indentBlocks(1));
+      if (code === 'BracketLeft') return run(() => indentBlocks(-1));
+      if (code === 'Backslash') return run(clearFormat);
+      return false;
+    }
+    if (k === 'x') return run(() => toggleInline('s'));
+    if (code === 'Digit7') return run(() => toggleList('ol'));
+    if (code === 'Digit8') return run(() => toggleList('ul'));
+    if (code === 'Period') return run(() => stepSize(1));
+    if (code === 'Comma') return run(() => stepSize(-1));
+    if (k === 'l') return run(() => setAlign('left'));
+    if (k === 'e') return run(() => setAlign('center'));
+    if (k === 'r') return run(() => setAlign('right'));
+    if (k === 'j') return run(() => setAlign('justify'));
+    if (k === 'v') { plainPasteNext = true; setTimeout(() => { plainPasteNext = false; }, 400); return false; }
+    return false;
+  }
+
   el.content.addEventListener('keydown', (e) => {
     if (e.target.id === 'title-input') {
       if (e.key === 'Enter' || (e.key === 'ArrowDown' && e.target.selectionStart === e.target.value.length)) {
@@ -3550,6 +4890,8 @@ kbd {
     }
     const ed = editorEl();
     if (!ed || !ed.contains(e.target)) return;
+    if (e.isComposing || composing) return;
+    if (ed.isContentEditable && formatShortcut(e)) return;
     if (e.altKey && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
       e.preventDefault();
       const c = getCaret();
@@ -3557,6 +4899,16 @@ kbd {
       if (!c || !a) return;
       const i = a.paragraphs.findIndex((p) => p.id === c.pid);
       moveParagraph(c.pid, i + (e.key === 'ArrowUp' ? -1 : 1));
+      return;
+    }
+    if (e.key === 'Tab' && !e.altKey && !e.ctrlKey && !e.metaKey && ed.isContentEditable) {
+      const a = current();
+      const c = getCaret();
+      const pids = c ? selectedPids(a, c) : [];
+      if (pids.length && pids.every((pid) => ['ul', 'ol'].includes(R.typeOf(a.paragraphs.find((p) => p.id === pid))))) {
+        e.preventDefault();
+        indentBlocks(e.shiftKey ? -1 : 1);
+      }
       return;
     }
     if (e.key === 'ArrowUp' && !e.shiftKey && !e.altKey) {
@@ -3570,6 +4922,13 @@ kbd {
       }
     }
   });
+  el.content.addEventListener('focusin', (e) => { if (e.target === editorEl()) clearHighlight('ghost'); });
+  el.content.addEventListener('focusout', (e) => {
+    if (e.target !== editorEl()) return;
+    const c = getCaret();
+    if (c) ui.sel = c;
+    setTimeout(paintGhost, 0);
+  });
   el.content.addEventListener('mousemove', (e) => {
     const wrap = $('#editor-wrap');
     if (!wrap || dragState) return;
@@ -3577,20 +4936,16 @@ kbd {
     const p = e.target.closest && e.target.closest('#editor > p');
     if (p) pid = p.dataset.pid;
     else {
-      const it = e.target.closest && e.target.closest('.g-item, .g-chip');
+      const it = e.target.closest && e.target.closest('.g-item, .g-bar');
       if (it) pid = it.dataset.pid || it.dataset.chip;
     }
     if (pid !== ui.hoverPid) { ui.hoverPid = pid; refreshGutterVisibility(); }
-  });
-  el.content.addEventListener('transitionend', (e) => {
-    if (e.target.matches && e.target.matches('#editor > p')) renderGutter();
   });
   el.content.addEventListener('mouseleave', () => { if (ui.hoverPid) { ui.hoverPid = null; refreshGutterVisibility(); } });
 
   el.content.addEventListener('click', (e) => {
     const b = e.target.closest('button, [data-key]');
     if (!b) return;
-    if (b.dataset.mark) { toggleMark(b.dataset.mark); return; }
     if (b.dataset.chip) { openChipMenu(b, b.dataset.chip); return; }
     const act = b.dataset.act;
     if (act === 'cancel-run') cancelRun();
@@ -3671,18 +5026,10 @@ kbd {
     const c = getCaret();
     if (!c) return;
     const changedPid = !ui.caret || ui.caret.pid !== c.pid;
-    const changedSpan = !ui.sel || ui.sel.endPid !== c.endPid || ui.sel.collapsed !== c.collapsed;
     ui.caret = { pid: c.pid, offset: c.offset };
     ui.sel = c;
-    if (changedPid) {
-      refreshGutterVisibility();
-      const ed = editorEl();
-      if (ed) {
-        ed.classList.add('has-current');
-        $$('p', ed).forEach((p) => p.classList.toggle('is-current', p.dataset.pid === c.pid));
-      }
-    }
-    if (changedPid || changedSpan) syncFormatBar();
+    if (pending && !pendingFor(c)) pending = null;
+    queueSyncFormatBar();
     clearTimeout(selTimer);
     selTimer = setTimeout(() => {
       const prev = ui.provSel;
@@ -3727,7 +5074,7 @@ kbd {
     if (!a || ui.mode !== 'write') return;
     if (S.activeRound(a)) { setMode('review'); return; }
     const order = a.paragraphs.filter((p) => a.marks[p.id] && p.text.trim()).map((p) => p.id);
-    if (!order.length) { toast('先标记想请 AI 修改的段落'); return; }
+    if (!order.length) { toast('先标记段落'); return; }
     pushUndo('送审', { caret: getCaret() });
     const round = S.beginRound(a, Date.now());
     const controller = new AbortController();
@@ -3757,10 +5104,10 @@ kbd {
         ui.showBar = !inspectorVisible();
         renderAll();
         focusHunk(ui.focusKey, { scroll: true });
-        announce(`改稿完成，共 ${total} 处修改。按 A 采用，O 保留原句，E 自己重写。`);
+        announce(`改稿完成，共 ${total} 处修改`);
       } else {
         renderSidebar();
-        toast(`“${a.title || '无标题'}”改稿完成，共 ${total} 处修改`, { action: { label: '去审阅', run: () => openArticle(a.id, { mode: 'review' }) } });
+        toast(`“${a.title || '无标题'}”改稿完成`, { action: { label: '审阅', run: () => openArticle(a.id, { mode: 'review' }) } });
       }
     } catch (err) {
       if (err && err.name === 'AbortError') {
@@ -3770,7 +5117,7 @@ kbd {
         touch(a);
         if (data.currentId === a.id) renderAll();
         else renderSidebar();
-        toast('已取消改稿，标记保留不变');
+        toast('已取消改稿');
       } else {
         throw err;
       }
@@ -3801,12 +5148,17 @@ kbd {
     return `修改 ${n}：${desc}。${st}`;
   }
 
-  function hunkHTML(h, variant, n) {
+  /* 审阅时文字差异和排版分开：差异按逐词对比标出，片段内部仍按各稿自己的字符样式显示（差异色优先于文字颜色）。 */
+  const NO_COLOR = { noColor: true };
+
+  function hunkHTML(h, variant, n, para) {
     const d = h.decision;
     const cls = `hunk ${d ? `is-${d.choice}` : 'is-pending'} ${ui.focusKey === h.key ? 'is-focused' : ''}`;
     const attrs = `class="${cls}" data-key="${h.key}" role="button" tabindex="${ui.focusKey === h.key && variant !== 'base' && variant !== 'result' ? 0 : -1}" aria-label="${esc(hunkLabel(h, n))}"`;
-    const delS = h.del ? `<span class="seg-del">${esc(h.del)}</span>` : '';
-    const insS = h.ins ? `<span class="seg-ins">${esc(h.ins)}</span>` : '';
+    const delHTML = R.sliceHTML(para.src, h.bStart, h.bEnd, NO_COLOR);
+    const insHTML = R.sliceHTML(para.aiSrc, h.aStart, h.aEnd, NO_COLOR);
+    const delS = h.del ? `<span class="seg-del">${delHTML}</span>` : '';
+    const insS = h.ins ? `<span class="seg-ins">${insHTML}</span>` : '';
     if (variant === 'base') {
       return `<span ${attrs}>${h.del ? delS : '<span class="ins-point" aria-hidden="true"></span>'}</span>`;
     }
@@ -3814,39 +5166,39 @@ kbd {
       return `<span ${attrs}>${h.ins ? insS : '<span class="del-point" aria-hidden="true"></span>'}</span>`;
     }
     if (!d) {
-      if (variant === 'result') return `<span ${attrs}><span class="pending-ghost">${esc(h.del) || '<span class="ins-point" aria-hidden="true"></span>'}</span></span>`;
+      if (variant === 'result') return `<span ${attrs}><span class="pending-ghost">${delHTML || '<span class="ins-point" aria-hidden="true"></span>'}</span></span>`;
       return `<span ${attrs}>${delS}${insS}</span>`;
     }
-    const chosen = d.choice === 'adopt' ? h.ins : d.choice === 'keep' ? h.del : d.text;
-    return `<span ${attrs}><span class="chosen ${chosen ? '' : 'void'}">${esc(chosen)}</span></span>`;
+    let chosen;
+    if (d.choice === 'adopt') chosen = R.sliceHTML(para.aiSrc, h.aStart, h.aEnd);
+    else if (d.choice === 'keep') chosen = delHTML;
+    else chosen = R.inlineHTML(d.text, [{ n: d.text.length, ...R.charAttrs(R.runsOf(para.src), h.bStart) }], NO_COLOR);
+    const empty = d.choice === 'adopt' ? !h.ins : d.choice === 'keep' ? !h.del : !d.text;
+    return `<span ${attrs}><span class="chosen ${empty ? 'void' : ''}">${chosen}</span></span>`;
   }
 
   function paraHTML(para, variant, counter) {
     let out = '';
     let hi = 0;
+    let bPos = 0;
     for (const s of para.segments) {
-      if (s.type === 'eq') out += esc(s.text);
-      else { const h = para.hunks[hi++]; out += hunkHTML(h, variant, counter.get(h.key)); }
+      if (s.type === 'eq') { out += R.sliceHTML(para.src, bPos, bPos + s.text.length); bPos += s.text.length; }
+      else { const h = para.hunks[hi++]; out += hunkHTML(h, variant, counter.get(h.key), para); bPos += s.del.length; }
     }
     return out;
   }
+
+  const blockOpen = (p, nums, cls = '') => `<p class="${R.blockClass(p)} ${cls}"${nums.get(p.id) ? ` data-num="${nums.get(p.id)}"` : ''}>`;
 
   function renderReview(a) {
     const round = S.activeRound(a);
     if (!round || round.status !== 'pending') {
       reviewModelCache = null;
-      const last = [...a.rounds].reverse().find((r) => r.status === 'done');
       const running = round && round.status === 'running';
       el.content.innerHTML = `<div class="empty full">
         <div class="glyph">${running ? '<span class="spinner" style="width:24px;height:24px"></span>' : icon('i-revise')}</div>
         <h3>${running ? 'AI 正在改稿' : '没有待审阅的改稿'}</h3>
-        <p>${running ? '改完后，这里会按文章顺序列出每一处修改，供你对照送审稿逐处取舍。' : `在写作视图里标记段落并请 AI 改稿，改稿返回后会出现在这里。${last ? `最近一轮（第 ${last.n} 轮）的取舍可以在“历史”里回看。` : ''}`}</p>
-        <div style="display:flex;gap:8px;margin-top:6px">
-          <button type="button" class="btn ${running ? '' : 'primary'}" data-act="go-write">回到写作</button>
-          ${last ? '<button type="button" class="btn" data-act="go-history">查看历史</button>' : ''}
-        </div></div>`;
-      const gh = $('[data-act="go-history"]', el.content);
-      if (gh) gh.addEventListener('click', () => setMode('history'));
+        <div style="display:flex;gap:8px;margin-top:6px"><button type="button" class="btn" data-act="go-write">回到写作</button></div></div>`;
       return;
     }
     const model = S.reviewModel(a, round);
@@ -3858,40 +5210,35 @@ kbd {
       ui.focusKey = firstOpen ? firstOpen.key : null;
     }
     const focusPid = ui.focusKey ? ui.focusKey.split(':')[0] : null;
-    const markedCount = model.paras.filter((p) => p.marked).length;
+    const nums = R.numbering(model.submitted.paragraphs);
     const body = model.paras.map((para) => {
-      if (!para.marked) return `<p class="r-para context">${esc(para.base)}</p>`;
-      const decided = para.hunks.filter((h) => h.decision).length;
+      const open = (cls) => blockOpen(para.src, nums, `r-para ${cls || ''}`);
+      if (!para.marked) return `${open('context')}${R.inlineHTML(para.src.text, para.src.runs)}</p>`;
       const head = `<div class="r-head">
-          <span>第 ${para.index + 1} 段</span><span class="tag">${esc(S.instructionLabel(para.meta))}</span>
-          <span>${para.hunks.length ? `${para.hunks.length} 处修改${decided ? ` · 已决定 ${decided}` : ''}` : '没有修改'}</span>
+          <span class="tag">${esc(S.instructionLabel(para.meta))}</span>
           <span class="grow"></span>
-          ${para.hunks.length ? `<button type="button" class="link" data-bulk="keep" data-pid="${para.id}">全部保留</button><button type="button" class="link" data-bulk="adopt" data-pid="${para.id}">全部采用</button>` : ''}
+          ${para.hunks.length > 1 ? `<span class="r-bulk"><button type="button" class="link" data-bulk="keep" data-pid="${para.id}">全部保留</button><button type="button" class="link" data-bulk="adopt" data-pid="${para.id}">全部采用</button></span>` : ''}
         </div>`;
       let inner;
       if (!para.hunks.length) {
-        inner = `<p class="r-para">${esc(para.base)}</p><p class="r-note">${para.meta.source === 'none' ? '模拟改稿没有找到要改的地方。原型里，示例段落之外的文字只做删赘词等简单规则精简。' : 'AI 没有修改这一段。'}</p>`;
+        inner = `${open()}${R.inlineHTML(para.src.text, para.src.runs)}</p><p class="r-note">没有修改</p>`;
       } else if (ui.diffLayout === 'stacked') {
-        inner = `<div class="stack-label">送审稿</div><p class="r-para">${paraHTML(para, 'base', counter)}</p>
-          <div class="stack-label">AI 改稿</div><p class="r-para">${paraHTML(para, 'ai', counter)}</p>
-          <div class="stack-label">你的定稿</div><p class="r-para">${paraHTML(para, 'result', counter)}</p>`;
+        inner = `<div class="stack-label">送审稿</div>${open()}${paraHTML(para, 'base', counter)}</p>
+          <div class="stack-label">AI 改稿</div>${open()}${paraHTML(para, 'ai', counter)}</p>
+          <div class="stack-label">定稿</div>${open()}${paraHTML(para, 'result', counter)}</p>`;
       } else {
-        inner = `<p class="r-para">${paraHTML(para, 'inline', counter)}</p>`;
+        inner = `${open()}${paraHTML(para, 'inline', counter)}</p>`;
       }
       return `<section class="r-block ${para.id === focusPid ? 'is-current' : ''}" data-pid="${para.id}" aria-label="第 ${para.index + 1} 段，${para.hunks.length} 处修改">${head}${inner}</section>`;
     }).join('');
     el.content.innerHTML = `
-      <div class="subbar">
-        <span class="label">第 ${round.n} 轮 · 对照送审稿阅读 AI 改稿</span>
-        <span class="grow"></span>
-        <div class="segmented small" role="group" aria-label="对比方式">
-          <button type="button" data-layout="inline" aria-pressed="${ui.diffLayout === 'inline'}">行内</button>
-          <button type="button" data-layout="stacked" aria-pressed="${ui.diffLayout === 'stacked'}">上下对照</button>
-        </div>
-      </div>
       <div class="page" id="review-page">
+        <div class="meta-line"><span>第 ${round.n} 轮 · ${model.total} 处修改</span><span class="grow"></span>
+          <div class="segmented small" role="group" aria-label="对比方式">
+            <button type="button" data-layout="inline" aria-pressed="${ui.diffLayout === 'inline'}">行内</button>
+            <button type="button" data-layout="stacked" aria-pressed="${ui.diffLayout === 'stacked'}">对照</button>
+          </div></div>
         <h1 class="r-title">${esc(a.title || '无标题')}</h1>
-        <div class="meta-line"><span>送审于 ${fmt(round.submittedAt)}</span><span>标记 ${markedCount} 段</span><span>${model.total} 处修改</span><span>改稿由本地模拟</span></div>
         <div class="read" id="review-doc" role="region" aria-label="改稿对照，按 J、K 在修改之间移动">${body}</div>
       </div>`;
     positionHunkBar();
@@ -3914,10 +5261,10 @@ kbd {
     bar.setAttribute('role', 'toolbar');
     bar.setAttribute('aria-label', '处理这处修改');
     bar.innerHTML = `<div class="row">
-        <button type="button" class="choice" data-choice="keep" aria-pressed="${Boolean(d && d.choice === 'keep')}">${icon('i-keep', 'sm')}保留原句<kbd>O</kbd></button>
-        <button type="button" class="choice" data-choice="adopt" aria-pressed="${Boolean(d && d.choice === 'adopt')}">${icon('i-check', 'sm')}采用改法<kbd>A</kbd></button>
-        <button type="button" class="choice" data-choice="rewrite" aria-pressed="${Boolean(d && d.choice === 'rewrite')}">${icon('i-pen', 'sm')}自己重写<kbd>E</kbd></button>
-      </div>${inspectorVisible() ? '' : `<div class="why"><span class="tagchip">${esc(h.tag)}</span>${esc(h.reason)}</div>`}`;
+        <button type="button" class="choice" data-choice="keep" aria-pressed="${Boolean(d && d.choice === 'keep')}" aria-keyshortcuts="O" title="保留原句（O）">${icon('i-keep', 'sm')}保留</button>
+        <button type="button" class="choice" data-choice="adopt" aria-pressed="${Boolean(d && d.choice === 'adopt')}" aria-keyshortcuts="A" title="采用改法（A）">${icon('i-check', 'sm')}采用</button>
+        <button type="button" class="choice" data-choice="rewrite" aria-pressed="${Boolean(d && d.choice === 'rewrite')}" aria-keyshortcuts="E" title="自己重写（E）">${icon('i-pen', 'sm')}重写</button>
+      </div>${inspectorVisible() ? '' : `<div class="why">${esc(h.reason)}</div>`}`;
     page.appendChild(bar);
     const rects = anchor.getClientRects();
     const last = rects[rects.length - 1] || anchor.getBoundingClientRect();
@@ -4033,10 +5380,10 @@ kbd {
     const node = openPopover(anchor, `<form class="pop-form" aria-label="自己重写这处">
         <div class="small muted">原句</div><p class="sent" style="font-size:13px">${sentenceHTML(para.base, h.bStart, h.bEnd, 'del')}</p>
         <div class="small muted">AI 改句</div><p class="sent" style="font-size:13px">${sentenceHTML(para.after, h.aStart, h.aEnd, 'ins')}</p>
-        <label class="small muted" for="rw-text">用你自己的写法替换标出的部分</label>
+        <label class="small muted" for="rw-text">你的写法</label>
         <textarea id="rw-text" rows="2">${esc(initial)}</textarea>
         <div class="small muted">替换后</div><p class="sent" id="rw-preview" style="font-size:13px" aria-live="polite"></p>
-        <div class="actions"><span class="hint">${K.enter} 使用 · Esc 取消</span><button type="button" class="btn" data-rw="cancel">取消</button><button type="submit" class="btn primary">使用这段</button></div>
+        <div class="actions"><button type="button" class="btn" data-rw="cancel">取消</button><button type="submit" class="btn primary">使用</button></div>
       </form>`, { role: 'dialog', label: '自己重写这处', focus: 'textarea', onClose: () => focusHunk(key, { scroll: false }) });
     node.style.width = 'min(400px, calc(100vw - 24px))';
     const ta = $('textarea', node);
@@ -4067,12 +5414,12 @@ kbd {
     const left = model.total - model.decided;
     if (left > 0) {
       openDialog({
-        title: `还有 ${left} 处没有决定`,
-        body: '<p>完成本轮时，这些修改要怎样处理？生成定稿后仍可撤销。</p>',
+        title: `还有 ${left} 处未决定`,
+        body: '',
         actions: [
-          { label: '返回审阅', value: null },
-          { label: '保留原句', value: 'keep' },
-          { label: '采用改法', value: 'adopt', primary: true },
+          { label: '返回', value: null },
+          { label: '都保留原句', value: 'keep' },
+          { label: '都采用', value: 'adopt', primary: true },
         ],
         onClose: (v) => { if (v) doFinish(v); },
       });
@@ -4094,8 +5441,8 @@ kbd {
     save();
     renderAll();
     flashChanges(submitted.paragraphs, a.paragraphs);
-    toast(`已生成“定稿 · 第 ${round.n} 轮”：采用 ${c.adopt} · 保留 ${c.keep} · 重写 ${c.rewrite}`, { action: { label: '撤销', run: undo } });
-    announce(`已生成定稿。${round.records.length} 处取舍已加入改写范例。`);
+    toast(`已生成定稿 · 第 ${round.n} 轮`, { action: { label: '撤销', run: undo } });
+    announce(`已生成定稿：采用 ${c.adopt}，保留 ${c.keep}，重写 ${c.rewrite}`);
   }
 
   function flashChanges(beforeParas, afterParas) {
@@ -4174,8 +5521,7 @@ kbd {
       el.content.innerHTML = `<div class="empty full">
         <div class="glyph">${icon('i-history')}</div>
         <h3>还没有历史版本</h3>
-        <p>送审一轮改稿，或按 ${K.mod}S 存为版本后，各稿会按时间出现在这里，可以任意两稿对照着读。</p>
-        <button type="button" class="btn primary" data-act="snapshot" style="margin-top:6px">${icon('i-bookmark', 'sm')}存为版本</button>
+        <button type="button" class="btn" data-act="snapshot" style="margin-top:6px">${icon('i-bookmark', 'sm')}存为版本</button>
       </div>`;
       return;
     }
@@ -4183,29 +5529,47 @@ kbd {
     const from = S.getVersion(a, c.from);
     const to = S.getVersion(a, c.to);
     const { rows, stats } = D.diffDocs(from.paragraphs, to.paragraphs);
+    const fromById = new Map(from.paragraphs.map((p) => [p.id, p]));
+    const toById = new Map(to.paragraphs.map((p) => [p.id, p]));
+    const nums = R.numbering(to.paragraphs);
+    const fromNums = R.numbering(from.paragraphs);
     const parts = [];
     let sameRun = [];
+    let fmtOnly = 0;
     const flush = () => {
       if (!sameRun.length) return;
       if (ui.onlyChanges) parts.push(`<div class="h-collapsed"><button type="button" data-expand>${sameRun.length} 段未改动</button></div>`);
-      else parts.push(...sameRun.map((r) => `<p class="h-row same">${esc(r.target)}</p>`));
+      else parts.push(...sameRun.map((r) => `${blockOpen(toById.get(r.id), nums, 'h-row same')}${R.inlineHTML(r.target, toById.get(r.id).runs)}</p>`));
       sameRun = [];
     };
     for (const r of rows) {
-      if (r.status === 'same' && !r.moved) { sameRun.push(r); continue; }
+      const bp = fromById.get(r.id);
+      const tp = toById.get(r.id);
+      const fmtChanged = r.status === 'same' && !R.sameFormat(bp, tp);
+      if (r.status === 'same' && !r.moved && !fmtChanged) { sameRun.push(r); continue; }
       flush();
-      if (r.status === 'added') parts.push(`<p class="h-row added"><span class="h-badge">新增段落</span><span class="seg-ins">${esc(r.target)}</span></p>`);
-      else if (r.status === 'removed') parts.push(`<p class="h-row removed"><span class="h-badge">删去段落</span><span class="seg-del">${esc(r.base)}</span></p>`);
+      if (r.status === 'added') parts.push(`${blockOpen(tp, nums, 'h-row added')}<span class="h-badge">新增</span><span class="seg-ins">${R.inlineHTML(tp.text, tp.runs, NO_COLOR)}</span></p>`);
+      else if (r.status === 'removed') parts.push(`${blockOpen(bp, fromNums, 'h-row removed')}<span class="h-badge">删去</span><span class="seg-del">${R.inlineHTML(bp.text, bp.runs, NO_COLOR)}</span></p>`);
       else {
-        const html = r.segments.map((s) => (s.type === 'eq' ? esc(s.text) : `${s.del ? `<span class="seg-del">${esc(s.del)}</span>` : ''}${s.ins ? `<span class="seg-ins">${esc(s.ins)}</span>` : ''}`)).join('');
-        parts.push(`<p class="h-row ${r.status}">${r.moved ? '<span class="h-badge">已移动</span>' : ''}${html}</p>`);
+        let bPos = 0;
+        let tPos = 0;
+        const html = r.segments.map((sg) => {
+          if (sg.type === 'eq') { const h = R.sliceHTML(tp, tPos, tPos + sg.text.length); bPos += sg.text.length; tPos += sg.text.length; return h; }
+          const h = `${sg.del ? `<span class="seg-del">${R.sliceHTML(bp, bPos, bPos + sg.del.length, NO_COLOR)}</span>` : ''}${sg.ins ? `<span class="seg-ins">${R.sliceHTML(tp, tPos, tPos + sg.ins.length, NO_COLOR)}</span>` : ''}`;
+          bPos += sg.del.length;
+          tPos += sg.ins.length;
+          return h;
+        }).join('');
+        if (fmtChanged) fmtOnly++;
+        const badges = `${r.moved ? '<span class="h-badge">已移动</span>' : ''}${fmtChanged ? '<span class="h-badge fmt" title="只改了排版，文字没有变化">格式</span>' : ''}`;
+        parts.push(`${blockOpen(tp, nums, `h-row ${r.status}${fmtChanged ? ' fmt' : ''}`)}${badges}${html}</p>`);
       }
     }
     flush();
     const titleDiff = from.title !== to.title
       ? D.diffText(from.title || '', to.title || '').map((s) => (s.type === 'eq' ? esc(s.text) : `${s.del ? `<span class="seg-del">${esc(s.del)}</span>` : ''}${s.ins ? `<span class="seg-ins">${esc(s.ins)}</span>` : ''}`)).join('')
       : esc(to.title || '无标题');
-    const same = c.from === c.to || (!stats.paras && from.title === to.title);
+    const same = c.from === c.to || (!stats.paras && !fmtOnly && from.title === to.title);
     el.content.innerHTML = `
       <div class="subbar">
         <span class="cmp-pair">
@@ -4214,11 +5578,11 @@ kbd {
           <label class="pill-select">到 <select class="select" data-cmp="to" aria-label="对比终点">${versionOptions(a, c.to)}</select></label>
         </span>
         <span class="grow"></span>
-        <label class="pill-select"><input type="checkbox" data-only ${ui.onlyChanges ? 'checked' : ''}> 折叠未改动段落</label>
+        <label class="pill-select"><input type="checkbox" data-only ${ui.onlyChanges ? 'checked' : ''}> 只看改动</label>
       </div>
       <div class="page">
         <h1 class="r-title">${titleDiff}</h1>
-        <div class="meta-line"><span class="stat">${same ? (c.from === c.to ? '同一稿' : '两稿相同') : `<span class="plus">+${stats.ins}</span> 字 · <span class="minus">−${stats.del}</span> 字 · ${stats.paras} 段有改动`}</span><span>${esc(S.versionLabel(from))} → ${esc(S.versionLabel(to))}</span></div>
+        <div class="meta-line"><span class="stat">${same ? (c.from === c.to ? '同一稿' : '两稿相同') : `<span class="plus">+${stats.ins}</span> <span class="minus">−${stats.del}</span> 字${stats.paras ? ` · ${stats.paras} 段改动` : ''}${fmtOnly ? ` · ${fmtOnly} 段仅格式` : ''}`}</span></div>
         <div class="read">${parts.join('') || '<p class="muted">两稿相同。</p>'}</div>
       </div>`;
   }
@@ -4275,13 +5639,12 @@ kbd {
         <div class="top"><span class="tagchip">${esc(r.tag)}</span><span>${choiceText}</span><span class="grow"></span><span>${esc(r.articleTitle || '无标题')} · 第 ${r.round} 轮 · ${fmt(r.at, { dateOnly: true })}</span></div>
         <dl class="pair">${rowsHTML}</dl>
         <p class="why">${esc(r.reason)}</p>
-        <div class="foot"><button type="button" class="btn ghost" data-goto-record="${r.id}">在文章中查看来历 ${icon('i-chevron-right', 'sm')}</button></div>
+        <div class="foot"><button type="button" class="btn ghost" data-goto-record="${r.id}">查看来历 ${icon('i-chevron-right', 'sm')}</button></div>
       </li>`;
     }).join('');
     el.content.innerHTML = `<div class="page">
       <div class="ex-head">
         <h1>改写范例</h1>
-        <p>每一轮取舍都会留在这里：哪些改法你采用了，哪些原句你坚持保留，哪些地方你自己重写。下次遇到类似的表达问题，可以回来看看当时怎样改。</p>
         <div class="chips" role="group" aria-label="按取舍筛选">
           ${chip('data-ex-choice', 'all', `全部 ${count('all')}`, ui.exChoice === 'all')}
           ${chip('data-ex-choice', 'adopt', `采用改法 ${count('adopt')}`, ui.exChoice === 'adopt')}
@@ -4291,9 +5654,9 @@ kbd {
         ${tags.length ? `<div class="chips" role="group" aria-label="按问题类型筛选">${chip('data-ex-tag', '', '所有类型', !ui.exTag)}${tags.map((t) => chip('data-ex-tag', t, t, ui.exTag === t)).join('')}</div>` : ''}
         <label class="search-field" style="margin:0;max-width:340px">${icon('i-search')}<input type="search" id="ex-search" placeholder="搜索句子或说明" value="${esc(ui.exQuery)}" aria-label="搜索改写范例"></label>
       </div>
-      ${!recs.length ? `<div class="empty"><div class="glyph">${icon('i-quote')}</div><h3>还没有改写范例</h3><p>完成一轮审阅后，你对每一处修改的取舍都会出现在这里。</p></div>`
+      ${!recs.length ? `<div class="empty"><div class="glyph">${icon('i-quote')}</div><h3>还没有改写范例</h3></div>`
         : list.length ? `<ul class="ex-list">${cards}</ul>`
-          : '<div class="empty"><h3>没有符合条件的范例</h3><p>换一个筛选条件，或清空搜索。</p></div>'}
+          : '<div class="empty"><h3>没有符合条件的范例</h3></div>'}
     </div>`;
   }
 
@@ -4378,53 +5741,36 @@ kbd {
 
   function inspectorWrite(a, close) {
     const round = S.activeRound(a);
-    const tabs = `<div class="insp-tabs"><div class="segmented" role="tablist" aria-label="检查器内容">
-        <button type="button" role="tab" data-tab="marks" aria-selected="${ui.inspectorTab === 'marks'}">改稿标记</button>
-        <button type="button" role="tab" data-tab="prov" aria-selected="${ui.inspectorTab === 'prov'}">这句话的来历</button>
-      </div></div>`;
-    const head = `<div class="insp-head"><span class="t">${ui.inspectorTab === 'prov' ? '来历' : '改稿'}</span>${close}</div>${tabs}`;
+    const head = `<div class="insp-head"><div class="segmented" role="tablist" aria-label="检查器内容">
+        <button type="button" role="tab" data-tab="marks" aria-selected="${ui.inspectorTab === 'marks'}">改稿</button>
+        <button type="button" role="tab" data-tab="prov" aria-selected="${ui.inspectorTab === 'prov'}">来历</button>
+      </div><span class="grow"></span>${close}</div>`;
     if (ui.inspectorTab === 'prov') return head + inspectorProvenance(a);
     if (round && round.status === 'running') {
       const run = ui.running && ui.running.articleId === a.id ? ui.running : null;
       const items = Object.keys(round.paras).map((pid) => {
         const p = a.paragraphs.find((x) => x.id === pid);
-        const idx = a.paragraphs.indexOf(p) + 1;
         const st = run ? run.status[pid] : 'wait';
-        const label = st === 'run' ? '改稿中…' : st === 'done' ? `${run.counts[pid] || 0} 处修改` : '等待中';
-        return `<li><span class="spinner ${st === 'run' ? '' : st === 'done' ? 'done' : 'idle'}" aria-hidden="true"></span><span class="ex">第 ${idx} 段 · ${esc(clip(p ? p.text : '', 18))}</span><span class="st">${label}</span></li>`;
+        const label = st === 'run' ? '改稿中' : st === 'done' ? `${run.counts[pid] || 0} 处` : '';
+        return `<li><span class="spinner ${st === 'run' ? '' : st === 'done' ? 'done' : 'idle'}" aria-hidden="true"></span><span class="ex">${esc(clip(p ? p.text : '', 22))}</span><span class="st">${label}</span></li>`;
       }).join('');
-      const done = run ? Object.values(run.status).filter((s) => s === 'done').length : 0;
-      const total = Object.keys(round.paras).length;
-      return `${head}<div class="insp-body">
-          <p class="lede">AI 正在按你的标记逐段改稿。每段改完，都会和送审稿逐词对照，供你取舍。</p>
-          <div class="card"><div class="progress-row"><span class="big">${done} / ${total}</span><span class="small muted">段已改完</span></div>
-          <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}" aria-label="改稿进度"><span style="width:${(done / total) * 100}%"></span></div></div>
-          <ul class="run-list" aria-live="polite">${items}</ul>
-        </div>
-        <div class="insp-foot"><button type="button" class="btn block" data-act="cancel-run">取消改稿</button>
-        <div class="hint">本地模拟，不联网。取消后标记保留，可以修改后重新送审。</div></div>`;
+      return `${head}<div class="insp-body"><ul class="run-list" aria-live="polite">${items}</ul></div>
+        <div class="insp-foot"><button type="button" class="btn block" data-act="cancel-run">取消改稿</button></div>`;
     }
     if (round && round.status === 'pending') {
       const m = S.reviewModel(a, round);
-      return `${head}<div class="insp-body">
-        <div class="card"><h4>${icon('i-revise', 'sm')}第 ${round.n} 轮改稿已返回</h4>
-        <p class="small">${Object.keys(round.paras).length} 段，共 ${m.total} 处修改，已决定 ${m.decided} 处。逐处选择保留原句、采用改法，或自己重写。</p></div>
-        </div><div class="insp-foot"><button type="button" class="btn primary block" data-act="go-review">开始审阅</button></div>`;
+      return `${head}<div class="insp-body"><p class="insp-note">第 ${round.n} 轮 · ${m.total} 处修改</p></div>
+        <div class="insp-foot"><button type="button" class="btn primary block" data-act="go-review">审阅</button></div>`;
     }
     const caretPid = ui.caret && a.paragraphs.some((p) => p.id === ui.caret.pid) ? ui.caret.pid : null;
-    const cp = caretPid && a.paragraphs.find((p) => p.id === caretPid);
     const marked = a.paragraphs.filter((p) => a.marks[p.id]);
-    const cur = cp ? `<div class="card cur-card">
-        <div class="grow"><div class="small muted">光标所在 · 第 ${a.paragraphs.indexOf(cp) + 1} 段</div><div class="ex">${esc(clip(cp.text, 40) || '（空段落）')}</div></div>
-        <button type="button" class="btn" data-mark-current="${cp.id}" ${cp.text.trim() ? '' : 'disabled'}>${a.marks[cp.id] ? '取消标记' : '标记'}</button>
-      </div>` : '';
     const list = marked.length ? `<ul class="mark-list">${marked.map((p) => {
       const idx = a.paragraphs.indexOf(p) + 1;
       const m = a.marks[p.id];
       const isCustom = Boolean(m.custom) || m.instruction === 'custom';
       return `<li class="mark-item ${p.id === caretPid ? 'is-current' : ''}">
-        <button type="button" class="excerpt" data-goto="${p.id}" title="跳到这一段">${esc(p.text)}</button>
-        <div class="ctrl"><span class="num">第 ${idx} 段</span>
+        <button type="button" class="excerpt" data-goto="${p.id}">${esc(p.text)}</button>
+        <div class="ctrl">
           <select class="select" data-instr="${p.id}" aria-label="第 ${idx} 段的修改要求">
             ${AI.INSTRUCTIONS.map((it) => `<option value="${it.id}" ${!isCustom && m.instruction === it.id ? 'selected' : ''}>${it.label}</option>`).join('')}
             <option value="custom" ${isCustom ? 'selected' : ''}>${isCustom && m.custom ? `自定义：${esc(clip(m.custom, 8))}` : '自定义…'}</option>
@@ -4432,20 +5778,9 @@ kbd {
           <button type="button" class="icon-btn sm" data-unmark="${p.id}" aria-label="取消标记第 ${idx} 段" title="取消标记">${icon('i-x', 'sm')}</button>
         </div></li>`;
     }).join('')}</ul>`
-      : `<div class="card flat"><p class="small muted">还没有标记段落。把光标放在一段里按 ${K.mod}${K.shift}M，或点击段落左侧的圆点。</p></div>`;
-    const presetHint = marked.some((p) => !AI.presetFor(p.text))
-      ? '有段落不是原样的示例文字，模拟服务对它们只做删赘词等简单规则精简。'
-      : '标记的段落都有预置改法，可以看到完整的改稿效果。';
-    return `${head}<div class="insp-body">
-        <p class="lede">先专心写完一轮，再标记想请 AI 修改的段落，并说明想要怎样改。每改完一轮就生成一个新版本，你逐处决定采用哪种写法。</p>
-        ${cur}
-        <div class="card flat" style="padding-bottom:0"><h4>已标记 ${marked.length} 段</h4></div>
-        ${list}
-      </div>
-      <div class="insp-foot">
-        <button type="button" class="btn primary block" data-act="submit" ${marked.length ? '' : 'disabled'}>${icon('i-revise', 'sm')}请 AI 改稿${marked.length ? ` · ${marked.length} 段` : ''}<kbd>${K.mod}${K.enter}</kbd></button>
-        <div class="hint">原型中的 AI 由本地模拟，不联网。${marked.length ? presetHint : ''}</div>
-      </div>`;
+      : '<p class="insp-note">没有标记的段落</p>';
+    return `${head}<div class="insp-body">${list}</div>
+      ${marked.length ? `<div class="insp-foot"><button type="button" class="btn primary block" data-act="submit">${icon('i-revise', 'sm')}请 AI 改稿 · ${marked.length} 段</button></div>` : ''}`;
   }
 
   function diffSentHTML(prev, cur) {
@@ -4456,13 +5791,13 @@ kbd {
   function inspectorProvenance(a) {
     const sel = ui.provSel;
     if (!sel) {
-      return `<div class="insp-body"><div class="empty"><div class="glyph">${icon('i-history')}</div><h3>选一句话</h3><p>把光标放在正文的任意一句话上，这里会显示它从初稿到现在的每一稿，以及你每一轮的取舍。</p></div></div>`;
+      return `<div class="insp-body"><p class="insp-note">把光标放在一句话上</p></div>`;
     }
     const { steps, records } = S.provenance(a, sel.pid, sel.text);
     const real = steps.filter((s) => s.text);
     const head = `<div class="insp-body"><div class="quote-current">${esc(sel.text)}</div>`;
     if (real.length <= 1) {
-      return `${head}<div class="empty" style="padding-top:12px"><h3>这句话还没有经过改稿</h3><p>${a.versions.length ? '它是在最近一次存档之后写下的。' : ''}送审之后，这里会记录它的每一稿和你的取舍。</p></div></div>`;
+      return `${head}<p class="insp-note">这句话还没有经过改稿</p></div>`;
     }
     let prevAuthor = null;
     const entries = steps.map((s) => {
@@ -4521,7 +5856,7 @@ kbd {
     const round = S.activeRound(a);
     const head = `<div class="insp-head"><span class="t">审阅${round ? ` · 第 ${round.n} 轮` : ''}</span>${close}</div>`;
     if (!round || round.status !== 'pending' || !reviewModelCache) {
-      return `${head}<div class="insp-body"><p class="lede">没有待审阅的改稿。</p></div>`;
+      return `${head}<div class="insp-body"><p class="insp-note">没有待审阅的改稿</p></div>`;
     }
     const m = reviewModelCache;
     const list = allHunks();
@@ -4534,7 +5869,7 @@ kbd {
       const d = h.decision;
       const mine = d && d.choice === 'rewrite'
         ? `<dt>你的</dt><dd><p class="sent">${esc(para.base.slice(D.sentenceAround(para.base, h.bStart, h.bEnd).start, h.bStart))}<mark class="mine ${d.text ? '' : 'void'}">${esc(d.text)}</mark>${esc(para.base.slice(h.bEnd, D.sentenceAround(para.base, h.bStart, h.bEnd).end))}</p></dd>` : '';
-      const btn = (c, ic, label, key) => `<button type="button" class="choice" data-insp-choice="${c}" aria-pressed="${Boolean(d && d.choice === c)}">${icon(ic, 'sm')}<span>${label}</span><kbd>${key}</kbd></button>`;
+      const btn = (c, ic, label, key) => `<button type="button" class="choice" data-insp-choice="${c}" aria-pressed="${Boolean(d && d.choice === c)}" aria-keyshortcuts="${key}" title="${label}（${key}）">${icon(ic, 'sm')}<span>${label}</span></button>`;
       card = `<div class="card">
         <h4>修改 ${n} / ${list.length} · 第 ${para.index + 1} 段<span style="flex:1"></span>
           <span class="nav-pair"><button type="button" class="icon-btn sm" data-step="-1" aria-label="上一处修改（K）" ${n <= 1 ? 'disabled' : ''}>${icon('i-chevron-left', 'sm')}</button><button type="button" class="icon-btn sm" data-step="1" aria-label="下一处修改（J）" ${n >= list.length ? 'disabled' : ''}>${icon('i-chevron-right', 'sm')}</button></span></h4>
@@ -4547,8 +5882,7 @@ kbd {
         <div class="choice-grid" role="group" aria-label="处理这处修改">
           ${btn('keep', 'i-keep', '保留原句', 'O')}${btn('adopt', 'i-check', '采用改法', 'A')}${btn('rewrite', 'i-pen', '自己重写', 'E')}
         </div>
-      </div>
-      <p class="small muted" style="margin:0 2px">${para.meta.source === 'preset' ? '这段使用原型的预置改法（模拟 AI）。' : para.meta.source === 'rules' ? '这段由本地规则精简（模拟 AI）。' : ''}</p>`;
+      </div>`;
     }
     return `${head}<div class="insp-body">
         <div class="card">
@@ -4559,14 +5893,13 @@ kbd {
         ${card}
       </div>
       <div class="insp-foot">
-        <button type="button" class="btn primary block" data-act="finish">${icon('i-check', 'sm')}完成本轮，生成定稿<kbd>${K.mod}${K.enter}</kbd></button>
-        <div class="hint">J / K 在修改之间移动。每一步都可以撤销（${K.mod}Z）。</div>
+        <button type="button" class="btn primary block" data-act="finish">完成本轮</button>
       </div>`;
   }
 
   function inspectorHistory(a, close) {
     const head = `<div class="insp-head"><span class="t">版本</span>${close}</div>`;
-    if (!a.versions.length) return `${head}<div class="insp-body"><p class="lede">还没有版本。送审或存为版本后，各稿会出现在这里。</p></div>`;
+    if (!a.versions.length) return `${head}<div class="insp-body"><p class="insp-note">还没有版本</p></div>`;
     const c = compareFor(a);
     const chain = [...a.versions, { id: 'live', kind: 'live', at: a.updatedAt, paragraphs: a.paragraphs }];
     const items = chain.map((v, i) => {
@@ -4595,7 +5928,6 @@ kbd {
         <span class="s">${esc(role)}</span></button></li>`;
     }).reverse().join('');
     return `${head}<div class="insp-body">
-        <p class="lede">每一轮都留在文章历史里。点一稿，与它的上一稿对照；也可以在上方任选两稿。</p>
         <ul class="timeline">${items}</ul>
       </div>`;
   }
@@ -4613,7 +5945,6 @@ kbd {
       if (t) t.focus();
       return;
     }
-    if (b.dataset.markCurrent) { toggleMark(b.dataset.markCurrent); return; }
     if (b.dataset.unmark) { toggleMark(b.dataset.unmark, false); return; }
     if (b.dataset.goto) {
       const p = a.paragraphs.find((x) => x.id === b.dataset.goto);
@@ -4657,12 +5988,12 @@ kbd {
   function saveVersion() {
     const a = current();
     if (!a) return;
-    if (isLocked(a)) { toast('改稿进行中，完成本轮后会自动保存定稿'); return; }
+    if (isLocked(a)) { toast('完成本轮后会自动保存定稿'); return; }
     const t = new Date();
     const def = a.versions.length ? `存档 ${t.getMonth() + 1}月${t.getDate()}日 ${pad(t.getHours())}:${pad(t.getMinutes())}` : '初稿';
     openDialog({
       title: '存为版本',
-      body: `<p>给这一稿起个名字。版本会保存完整正文，之后可以和任意一稿对照。</p><div class="field"><input type="text" value="${esc(def)}" aria-label="版本名称" maxlength="40"></div>`,
+      body: `<div class="field"><input type="text" value="${esc(def)}" aria-label="版本名称" maxlength="40"></div>`,
       actions: [{ label: '取消', value: null }, { label: '保存', value: 'ok', primary: true }],
       onClose: (v, name) => {
         if (v !== 'ok') return;
@@ -4670,29 +6001,47 @@ kbd {
         a.versions.push({ id: S.uid('v'), kind: 'snapshot', name: (name || def).trim() || def, at: Date.now(), title: a.title, paragraphs: S.snapshot(a.paragraphs) });
         touch(a);
         renderAll();
-        toast(`已存为版本“${(name || def).trim() || def}”`, { action: { label: '查看历史', run: () => setMode('history') } });
+        toast(`已存为“${(name || def).trim() || def}”`, { action: { label: '查看', run: () => setMode('history') } });
       },
     });
   }
 
-  function exportMarkdown(a) {
-    if (!a) return;
-    const blob = new Blob([S.toMarkdown(a)], { type: 'text/markdown;charset=utf-8' });
+  function download(a, content, type, ext) {
+    const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${(a.title || '无标题').replace(/[\\/:*?"<>|]/g, '_')}.md`;
+    link.download = `${(a.title || '无标题').replace(/[\\/:*?"<>|]/g, '_')}.${ext}`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  function exportMarkdown(a) {
+    if (!a) return;
+    download(a, S.toMarkdown(a), 'text/markdown;charset=utf-8', 'md');
     toast('已导出 Markdown');
+  }
+  function exportHTML(a) {
+    if (!a) return;
+    download(a, S.toHTML(a), 'text/html;charset=utf-8', 'html');
+    toast('已导出 HTML');
+  }
+
+  function showWordCount(a) {
+    const chars = charCount(a.paragraphs);
+    const paras = a.paragraphs.filter((p) => p.text.trim()).length;
+    openDialog({
+      title: '字数统计',
+      body: `<table class="count-table"><tr><td>字数</td><td>${chars}</td></tr><tr><td>段落</td><td>${paras}</td></tr><tr><td>版本</td><td>${a.versions.length}</td></tr></table>`,
+      actions: [{ label: '好', value: null, primary: true }],
+    });
   }
 
   function resetSamples() {
     openDialog({
       title: '恢复示例数据？',
-      body: '<p>这会清除你在原型里新建和修改的全部内容，回到三篇示例文章。</p>',
+      body: '<p>你在原型里写的内容会被清除。</p>',
       actions: [{ label: '取消', value: null }, { label: '恢复示例', value: 'ok', primary: true }],
       onClose: (v) => {
         if (v !== 'ok') return;
@@ -4712,27 +6061,33 @@ kbd {
 
   function showShortcuts() {
     const row = (label, keys) => `<tr><td>${label}</td><td>${keys.map((k) => `<kbd>${k}</kbd>`).join('')}</td></tr>`;
+    const M = K.mod;
+    const SH = K.shift;
     openDialog({
       title: '键盘快捷键',
       wide: true,
       body: `<table class="shortcut-table">
+        <tr><th colspan="2">排版</th></tr>
+        ${row('粗体、斜体、下划线', [`${M}B`, `${M}I`, `${M}U`])}
+        ${row('删除线', [`${M}${SH}X`])}
+        ${row('正文、标题 1–3', [`${M}${K.alt}0`, `${M}${K.alt}1–3`])}
+        ${row('编号列表、项目符号', [`${M}${SH}7`, `${M}${SH}8`])}
+        ${row('增加、减少缩进', [`${M}]`, `${M}[`])}
+        ${row('左对齐、居中、右对齐、两端对齐', [`${M}${SH}L`, `${M}${SH}E`, `${M}${SH}R`, `${M}${SH}J`])}
+        ${row('增大、减小字号', [`${M}${SH}.`, `${M}${SH},`])}
+        ${row('清除格式', [`${M}\\`])}
+        ${row('粘贴为纯文本', [`${M}${SH}V`])}
         <tr><th colspan="2">写作</th></tr>
-        ${row('标记或取消标记当前段落（选中多段时一起处理）', [`${K.mod}${K.shift}M`])}
-        ${row('上移、下移当前段落', [`${K.alt}${K.shift}${K.up}`, `${K.alt}${K.shift}${K.down}`])}
-        ${row('请 AI 改稿', [`${K.mod}${K.enter}`])}
-        ${row('查看光标所在句子的来历', [`${K.mod}I`])}
-        ${row('存为版本', [`${K.mod}S`])}
-        ${row('撤销、重做', [`${K.mod}Z`, `${K.mod}${K.shift}Z`])}
-        ${row('移到编辑工具栏（方向键选择，Esc 回到正文）', [`${K.alt}F10`])}
+        ${row('标记给 AI 改稿', [`${M}${SH}M`])}
+        ${row('请 AI 改稿', [`${M}${K.enter}`])}
+        ${row('上移、下移段落', [`${K.alt}${SH}${K.up}`, `${K.alt}${SH}${K.down}`])}
+        ${row('存为版本', [`${M}S`])}
+        ${row('撤销、重做', [`${M}Z`, `${M}${SH}Z`])}
+        ${row('移到排版工具栏', [`${K.alt}F10`])}
         <tr><th colspan="2">审阅</th></tr>
-        ${row('下一处、上一处修改', ['J', 'K'])}
-        ${row('采用改法', ['A'])}
-        ${row('保留原句', ['O'])}
-        ${row('自己重写', ['E'])}
-        ${row('显示或隐藏操作条', ['Space'])}
-        ${row('完成本轮，生成定稿', [`${K.mod}${K.enter}`])}
-        <tr><th colspan="2">通用</th></tr>
-        ${row('显示本表', [`${K.mod}/`])}
+        ${row('下一处、上一处', ['J', 'K'])}
+        ${row('采用、保留、重写', ['A', 'O', 'E'])}
+        ${row('完成本轮', [`${M}${K.enter}`])}
       </table>`,
       actions: [{ label: '好', value: null, primary: true }],
     });
@@ -4742,13 +6097,13 @@ kbd {
     openDialog({
       title: '关于这个原型',
       wide: true,
-      body: `<p>Redraft 是以 Diff 为核心的写作编辑器。这个网页原型用来体验它的交互：写作、标记、改稿、对照取舍、回看历史。正式产品计划为原生 macOS 应用。</p>
+      body: `<p>Redraft 是以 Diff 为核心的写作编辑器。这个网页原型用来体验它的交互；正式产品计划为原生 macOS 应用。</p>
         <ul class="about-list">
-          <li><b>真实运行：</b>编辑、分段、拖动段落、编辑工具栏与显示设置、撤销重做、标记、版本快照、任意两稿对比、逐句溯源、改写范例、Markdown 导出。文本对比在浏览器里实时计算：段落按稳定 ID 对齐，再用系统分词（Intl.Segmenter）逐词比较。</li>
-          <li><b>模拟：</b>AI 改稿。示例段落使用预置改法和说明；其他段落只做删赘词等本地规则精简，并如实标注。没有任何网络请求，也不需要账号或密钥。</li>
-          <li><b>保存：</b>内容只保存在这个浏览器的本地存储中。可以在“更多”菜单里恢复示例数据。</li>
+          <li><b>真实运行：</b>排版（样式、字体、字号、粗斜体、颜色、对齐、列表、缩进、行距）、撤销重做、标记、版本、任意两稿对比、逐句溯源、改写范例、Markdown 与 HTML 导出。</li>
+          <li><b>模拟：</b>AI 改稿。示例段落使用预置改法；其他段落只做删赘词等本地规则精简。没有网络请求。</li>
+          <li><b>保存：</b>内容只保存在这个浏览器里。</li>
         </ul>`,
-      actions: [{ label: '知道了', value: null, primary: true }],
+      actions: [{ label: '好', value: null, primary: true }],
     });
   }
 
@@ -4770,13 +6125,13 @@ kbd {
     }
 
     if (e.altKey && e.key === 'F10' && formatBarVisible()) { e.preventDefault(); focusFormatBar(); return; }
+    if (el.formatbar.contains(tgt) && formatShortcut(e)) return;
 
     if (mod && !e.altKey) {
       if (key === 'z' && !inField) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if (key === 'y' && !isMac && !inField) { e.preventDefault(); redo(); return; }
       if (key === 's') { e.preventDefault(); saveVersion(); return; }
       if (key === '/') { e.preventDefault(); showShortcuts(); return; }
-      if (key === 'i' && ui.view === 'article') { e.preventDefault(); openProvenance(); return; }
       if (key === 'm' && e.shiftKey && ui.view === 'article' && ui.mode === 'write') {
         e.preventDefault();
         markSelection();
@@ -4808,7 +6163,7 @@ kbd {
   /* ───────────────────────── 视口变化 ───────────────────────── */
 
   mqNarrow.addEventListener('change', () => { ui.sidebarOpen = !mqNarrow.matches; applyLayout(); renderToolbar(); });
-  mqMid.addEventListener('change', () => { ui.inspectorOpen = !mqMid.matches; applyLayout(); renderToolbar(); renderInspector(); });
+  mqMid.addEventListener('change', () => { if (mqMid.matches) ui.inspectorOpen = false; applyLayout(); renderToolbar(); renderInspector(); });
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimer);
@@ -4816,6 +6171,7 @@ kbd {
       closePopover(false);
       hideTip();
       syncFormatBar();
+      updateFbFade();
       renderGutter();
       if (ui.mode === 'review') positionHunkBar();
     }, 80);
@@ -4827,8 +6183,7 @@ kbd {
 
   /* ───────────────────────── 启动 ───────────────────────── */
 
-  window.__redraft = { get data() { return data; }, ui, display };
-  applyDisplay();
+  window.__redraft = { get data() { return data; }, ui, R };
   renderAll();
 })();
 </script>
