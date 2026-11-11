@@ -8,10 +8,11 @@
 
   const D = global.RedraftDiff;
   const AI = global.RedraftMockAI;
+  const R = global.RedraftRich;
 
   const uid = (prefix) => `${prefix}${Date.now().toString(36).slice(-4)}${Math.random().toString(36).slice(2, 7)}`;
   const clone = (x) => JSON.parse(JSON.stringify(x));
-  const snapshot = (paras) => paras.map((p) => ({ id: p.id, text: p.text }));
+  const snapshot = (paras) => paras.map(R.clonePara);
 
   function instructionLabel(mark) {
     if (!mark) return '';
@@ -55,15 +56,15 @@
     return round;
   }
 
-  /** AI 改完所有标记段落后，生成一份新版本。 */
+  /** AI 改完所有标记段落后，生成一份新版本。AI 只改文字，段落样式不变，字符样式随文字搬运。 */
   function completeRound(article, round, results, now) {
     const submitted = getVersion(article, round.submittedId);
     const aiParas = submitted.paragraphs.map((p) => {
       const r = results[p.id];
-      if (!r) return { id: p.id, text: p.text };
+      if (!r) return R.clonePara(p);
       round.paras[p.id].source = r.source;
       round.paras[p.id].notes = r.notes;
-      return { id: p.id, text: r.text };
+      return R.retext(p, r.text);
     });
     const ai = { id: uid('v'), kind: 'ai', round: round.n, at: now, title: article.title, paragraphs: aiParas };
     article.versions.push(ai);
@@ -81,14 +82,15 @@
   function reviewModel(article, round) {
     const submitted = getVersion(article, round.submittedId);
     const ai = getVersion(article, round.aiId);
-    const aiText = new Map(ai.paragraphs.map((p) => [p.id, p.text]));
+    const aiParas = new Map(ai.paragraphs.map((p) => [p.id, p]));
     let total = 0;
     let decided = 0;
     const counts = { adopt: 0, keep: 0, rewrite: 0 };
     const paras = submitted.paragraphs.map((p, index) => {
       const meta = round.paras[p.id];
-      if (!meta) return { id: p.id, index, marked: false, base: p.text };
-      const after = aiText.get(p.id) ?? p.text;
+      if (!meta) return { id: p.id, index, marked: false, base: p.text, src: p };
+      const aiSrc = aiParas.get(p.id) || p;
+      const after = aiSrc.text;
       const segments = D.diffText(p.text, after);
       const hunks = [];
       let bPos = 0;
@@ -105,7 +107,7 @@
         total++;
         if (decision) { decided++; counts[decision.choice]++; }
       });
-      return { id: p.id, index, marked: true, base: p.text, after, segments, hunks, meta };
+      return { id: p.id, index, marked: true, base: p.text, after, segments, hunks, meta, src: p, aiSrc };
     });
     return { paras, total, decided, counts, submitted, ai };
   }
@@ -130,12 +132,12 @@
     const finalParas = [];
     const records = [];
     for (const para of model.paras) {
-      if (!para.marked) { finalParas.push({ id: para.id, text: para.base }); continue; }
+      if (!para.marked) { finalParas.push(R.clonePara(para.src)); continue; }
       for (const h of para.hunks) {
         if (!round.decisions[h.key]) round.decisions[h.key] = { choice: fallback || 'keep', auto: true };
       }
       const { text, spans } = composeParagraph(para, round.decisions, null);
-      finalParas.push({ id: para.id, text });
+      finalParas.push(R.retext(para.src, text));
       for (const h of para.hunks) {
         const d = round.decisions[h.key];
         const span = spans[h.key];
@@ -214,8 +216,11 @@
   }
 
   function toMarkdown(article) {
-    const body = article.paragraphs.map((p) => p.text).filter((t) => t.trim()).join('\n\n');
-    return `# ${article.title || '无标题'}\n\n${body}\n`;
+    return R.toMarkdown(article.title, article.paragraphs);
+  }
+
+  function toHTML(article) {
+    return R.htmlDocument(article.title, article.paragraphs);
   }
 
   global.RedraftSession = {
@@ -235,5 +240,6 @@
     provenance,
     allRecords,
     toMarkdown,
+    toHTML,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
