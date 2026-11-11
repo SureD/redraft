@@ -14,6 +14,7 @@
 :root {
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-serif: "Songti SC", "STSong", "Noto Serif CJK SC", "Source Han Serif SC", "Iowan Old Style", "New York", Georgia, serif;
 
   --desktop: #dfe2ea;
   --paper: #fdfdfc;
@@ -60,6 +61,7 @@
   --sb-w: 252px;
   --insp-w: 324px;
   --bar-h: 52px;
+  --fb-h: 40px;
   --read-size: 17px;
   --read-lh: 1.9;
   --measure: 38em;
@@ -136,6 +138,7 @@ button { cursor: default; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .icon { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .icon.sm { width: 15px; height: 15px; }
+.icon.xs { width: 11px; height: 11px; stroke-width: 1.8; }
 kbd {
   font-family: var(--font);
   font-size: 11px;
@@ -293,6 +296,110 @@ kbd {
   transition: border-color var(--dur) var(--ease);
 }
 .toolbar.scrolled { border-bottom-color: var(--sep-strong); }
+.has-fb .toolbar, .has-fb .toolbar.scrolled { border-bottom-color: transparent; }
+
+/* —— 编辑工具栏：与窗口工具栏同一种细材质，分组克制，正文滚动时始终可用 —— */
+.formatbar {
+  position: absolute; z-index: 19; top: var(--bar-h); left: 0; right: 0;
+  height: var(--fb-h);
+  display: flex; align-items: center; gap: 2px;
+  padding: 0 10px 0 12px;
+  background: var(--mat-bar);
+  -webkit-backdrop-filter: var(--mat-blur-thin);
+  backdrop-filter: var(--mat-blur-thin);
+  border-top: 0.5px solid var(--sep);
+  border-bottom: 0.5px solid transparent;
+  transition: border-color var(--dur) var(--ease);
+  container-type: inline-size;
+}
+.formatbar[hidden] { display: none; }
+.formatbar.scrolled { border-bottom-color: var(--sep-strong); }
+.fb-group { display: flex; align-items: center; gap: 1px; flex: none; }
+.fb-btn {
+  height: 28px; min-width: 30px; padding: 0 7px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  border: 0; border-radius: 7px; background: transparent; color: var(--text-2);
+  font-size: 12.5px; font-weight: 500; white-space: nowrap;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), opacity var(--dur) var(--ease);
+}
+.fb-btn .icon { width: 17px; height: 17px; }
+.fb-btn:hover { background: var(--fill); color: var(--text); }
+.fb-btn:active { background: var(--fill-press); }
+.fb-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); }
+.fb-btn[aria-expanded="true"] { background: var(--fill-press); color: var(--text); }
+.fb-btn[aria-disabled="true"] { opacity: 0.36; }
+.fb-btn[aria-disabled="true"]:hover, .fb-btn[aria-disabled="true"]:active { background: transparent; color: var(--text-2); }
+.fb-combo { gap: 0; border-radius: 8px; box-shadow: inset 0 0 0 0.5px var(--sep-strong); }
+.fb-combo .fb-btn { border-radius: 0; }
+.fb-combo .fb-btn:first-child { border-radius: 8px 0 0 8px; padding-left: 8px; }
+.fb-combo .fb-btn:last-child { border-radius: 0 8px 8px 0; box-shadow: inset 0.5px 0 0 var(--sep-strong); }
+.fb-combo .fb-btn[aria-pressed="true"] { box-shadow: none; }
+.fb-combo .fb-btn:focus-visible { box-shadow: var(--focus); }
+.fb-menu { gap: 4px; padding-right: 6px; }
+.fb-menu .icon.xs { opacity: 0.7; }
+.fb-menu.is-set .fb-label { color: var(--accent-text); }
+.fb-sep { width: 0.5px; height: 18px; margin: 0 6px; background: var(--sep-strong); flex: none; }
+.fb-spacer { flex: 1 1 auto; min-width: 8px; }
+.fb-status {
+  display: flex; align-items: center; gap: 10px; padding: 0 8px;
+  font-size: 11.5px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.fb-status.locked { color: var(--text-2); gap: 5px; }
+.fb-marked { color: var(--accent-text); }
+.fb-aa .aa { font-family: Georgia, "Times New Roman", serif; font-size: 15px; font-weight: 500; letter-spacing: -0.02em; line-height: 1; }
+.fb-more { display: none; }
+@container (max-width: 740px) { .fb-status { display: none; } }
+@container (max-width: 640px) {
+  .fb-btn.has-text:not([data-fb="mark"]) .fb-label { display: none; }
+  .fb-sep { margin: 0 3px; }
+}
+@container (max-width: 500px) {
+  .formatbar .fb-opt { display: none; }
+  .formatbar .fb-more { display: inline-flex; }
+}
+@container (max-width: 380px) {
+  .fb-btn { min-width: 28px; padding: 0 5px; }
+  .fb-sep { margin: 0 2px; }
+  .fb-aa .icon { display: none; }
+}
+
+.tip {
+  position: fixed; z-index: 95; pointer-events: none;
+  display: flex; flex-direction: column; gap: 2px; max-width: 260px;
+  padding: 5px 9px 6px; border-radius: 7px;
+  background: var(--mat-pop);
+  -webkit-backdrop-filter: var(--mat-blur); backdrop-filter: var(--mat-blur);
+  box-shadow: var(--shadow-pop); border: 0.5px solid var(--mat-edge);
+  font-size: 12px; line-height: 1.4; color: var(--text);
+  animation: fade-in 120ms var(--ease);
+}
+.tip-main { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.tip-why { font-size: 11.5px; color: var(--text-2); }
+
+.disp-pop { width: 296px; }
+.disp { display: flex; flex-direction: column; gap: 9px; padding: 6px 6px 4px; }
+.disp-title { display: flex; flex-direction: column; gap: 1px; padding: 0 2px; font-size: 13px; font-weight: 650; }
+.disp-title span { font-size: 11.5px; font-weight: 450; color: var(--text-3); }
+.disp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 2px; }
+.disp-k { font-size: 12.5px; color: var(--text-2); }
+.disp .segmented button { min-width: 50px; justify-content: center; }
+.stepper { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 8px; background: var(--fill); }
+.stepper button { width: 36px; height: 22px; border: 0; border-radius: 6px; background: transparent; display: grid; place-items: center; color: var(--text); }
+.stepper button:hover { background: var(--fill-hover); }
+.stepper button:disabled { opacity: 0.35; }
+.stepper output { min-width: 30px; text-align: center; font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.a-sm { font-size: 11px; font-weight: 600; }
+.a-lg { font-size: 16px; font-weight: 600; }
+.disp-switch { width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px 4px; border: 0; border-radius: 8px; background: transparent; text-align: left; }
+.disp-switch:hover { background: var(--fill); }
+.disp-switch .grow { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.disp-switch .l { font-size: 13px; }
+.disp-switch .h { font-size: 11.5px; color: var(--text-3); }
+.sw { position: relative; width: 30px; height: 18px; flex: none; border-radius: 99px; background: var(--fill-press); transition: background var(--dur) var(--ease); }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform var(--dur) var(--ease); }
+.disp-switch[aria-checked="true"] .sw { background: var(--accent); }
+.disp-switch[aria-checked="true"] .sw::after { transform: translateX(12px); }
+.disp-foot { display: flex; justify-content: flex-end; }
 .tb-title { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; padding: 0 6px; }
 .tb-title .t { font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tb-title .s { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -342,12 +449,12 @@ kbd {
   display: inline-flex; align-items: center; gap: 5px;
 }
 .segmented button:hover { color: var(--text); }
-.segmented button[aria-pressed="true"], .segmented button[aria-selected="true"] {
+.segmented button[aria-pressed="true"], .segmented button[aria-selected="true"], .segmented button[aria-checked="true"] {
   background: var(--paper); color: var(--text);
   box-shadow: 0 0.5px 0 rgba(0, 0, 0, 0.04), 0 1px 3px rgba(20, 20, 50, 0.12), 0 0 0 0.5px rgba(20, 20, 50, 0.08);
 }
 @media (prefers-color-scheme: dark) {
-  .segmented button[aria-pressed="true"], .segmented button[aria-selected="true"] { background: #3a3a40; }
+  .segmented button[aria-pressed="true"], .segmented button[aria-selected="true"], .segmented button[aria-checked="true"] { background: #3a3a40; }
 }
 .segmented button:disabled { opacity: 0.4; }
 .segmented .pip { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
@@ -359,6 +466,7 @@ kbd {
   scroll-padding-top: calc(var(--bar-h) + 24px);
   scroll-behavior: smooth;
 }
+.has-fb .content { padding-top: calc(var(--bar-h) + var(--fb-h)); scroll-padding-top: calc(var(--bar-h) + var(--fb-h) + 24px); }
 .page { max-width: calc(var(--measure) + 96px); margin: 0 auto; padding: 36px 48px 140px; position: relative; }
 
 /* —— 写作 —— */
@@ -396,13 +504,17 @@ kbd {
   min-height: 40vh;
   outline: none;
 }
+.editor, .title-input, .read, .r-title { font-family: var(--read-font, var(--font)); }
+.window[data-font="serif"] { --read-font: var(--font-serif); }
 .editor:focus-visible { box-shadow: none; }
 .editor p {
   position: relative;
   margin: 0 0 0.85em;
   border-radius: 10px;
-  transition: background-color var(--dur) var(--ease), padding var(--dur) var(--ease), margin var(--dur) var(--ease);
+  transition: background-color var(--dur) var(--ease), padding var(--dur) var(--ease), margin var(--dur) var(--ease), color 260ms var(--ease);
 }
+.focus-mode .editor.has-current p:not(.is-current) { color: var(--text-3); }
+.no-para-ctl .g-item { display: none; }
 .editor p.is-marked {
   background: var(--accent-softer);
   box-shadow: inset 0 0 0 0.5px var(--accent-line);
@@ -745,6 +857,9 @@ kbd {
   text-align: left; font-size: 13px; color: var(--text);
 }
 .menu-item:hover, .menu-item:focus-visible { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.menu-item:disabled { opacity: 0.4; }
+.menu-item:disabled:hover { background: transparent; color: var(--text); }
+.menu-item:disabled:hover .icon, .menu-item:disabled:hover kbd { color: var(--text-3); }
 .menu-item:hover .icon, .menu-item:focus-visible .icon, .menu-item:hover kbd, .menu-item:focus-visible kbd { color: inherit; }
 .menu-item .icon { color: var(--text-2); width: 16px; height: 16px; }
 .menu-item .grow { flex: 1; }
@@ -830,6 +945,7 @@ kbd {
     transition: transform 240ms var(--ease), opacity 200ms var(--ease), visibility 0s;
   }
   .window.no-inspector .inspector { transform: translateX(16px); opacity: 0; visibility: hidden; transition: transform 240ms var(--ease), opacity 200ms var(--ease), visibility 0s 240ms; }
+  .window.has-fb .inspector { top: calc(var(--bar-h) + var(--fb-h) + 6px); }
   .insp-head { height: 44px; }
 }
 @media (max-width: 760px) {
@@ -855,7 +971,8 @@ kbd {
   .g-handle { display: none; }
   .title-input, .r-title, .ex-head h1 { font-size: 25px; }
   .segmented button { padding: 0 9px; }
-  .inspector { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 62%; }
+  .inspector, .window.has-fb .inspector { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 62%; }
+  .formatbar { padding: 0 6px 0 8px; }
   .window.no-inspector .inspector { transform: translateY(20px); }
   .r-block, .editor p.is-marked { margin-left: -10px; margin-right: -10px; padding-left: 10px; padding-right: 10px; }
 }
@@ -879,6 +996,8 @@ kbd {
   .seg-del { text-decoration: line-through; }
   .seg-ins { text-decoration: underline; }
   .hunk.is-focused { outline: 2px solid Highlight; }
+  .fb-btn[aria-pressed="true"] { outline: 1px solid Highlight; }
+  .fb-btn[aria-disabled="true"] { color: GrayText; }
 }
 </style>
 </head>
@@ -912,6 +1031,9 @@ kbd {
       <symbol id="i-arrow-down" viewBox="0 0 20 20"><path d="M10 4.5v11M5.5 11l4.5 4.5 4.5-4.5"/></symbol>
       <symbol id="i-mark" viewBox="0 0 20 20"><circle cx="10" cy="10" r="5.75"/></symbol>
       <symbol id="i-mark-on" viewBox="0 0 20 20"><circle cx="10" cy="10" r="5.75" fill="currentColor"/><path d="m7.5 10.2 1.7 1.7 3.4-3.7" stroke="var(--on-accent)"/></symbol>
+      <symbol id="i-undo" viewBox="0 0 20 20"><path d="M7.25 5 3.75 8.5 7.25 12"/><path d="M4 8.5h8a4.25 4.25 0 0 1 0 8.5H9.5"/></symbol>
+      <symbol id="i-redo" viewBox="0 0 20 20"><path d="M12.75 5l3.5 3.5-3.5 3.5"/><path d="M16 8.5H8a4.25 4.25 0 0 0 0 8.5h2.5"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 20 20"><rect x="4.75" y="8.75" width="10.5" height="7.5" rx="1.75"/><path d="M7.25 8.75V6.5a2.75 2.75 0 0 1 5.5 0v2.25"/></symbol>
       <symbol id="i-reset" viewBox="0 0 20 20"><path d="M4.25 10a5.75 5.75 0 1 0 1.7-4.1"/><path d="M4 3.75V6.5h2.75"/></symbol>
     </defs>
   </svg>
@@ -957,6 +1079,7 @@ kbd {
 
       <main class="main" id="main">
         <header class="toolbar" id="toolbar"></header>
+        <div class="formatbar" id="formatbar" role="toolbar" aria-label="编辑工具" aria-controls="content" hidden></div>
         <div class="content" id="content" tabindex="-1"></div>
       </main>
 
@@ -1866,6 +1989,7 @@ kbd {
     examplesNav: $('#nav-examples'),
     examplesCount: $('#examples-count'),
     toolbar: $('#toolbar'),
+    formatbar: $('#formatbar'),
     content: $('#content'),
     inspector: $('#inspector'),
     scrim: $('#scrim'),
@@ -1892,7 +2016,7 @@ kbd {
   function save() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, prefs: { diffLayout: ui.diffLayout } })); } catch (_) { /* 忽略 */ }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, prefs: { diffLayout: ui.diffLayout, display } })); } catch (_) { /* 忽略 */ }
     }, 250);
   }
 
@@ -1913,9 +2037,18 @@ kbd {
     articleQuery: '',
     running: null,
     caret: null,
+    sel: null,
     hoverPid: null,
     provSel: null,
   };
+
+  /* 显示设置只改变阅读面，不进入文档模型，也不参与对比和溯源。 */
+  const DISPLAY_DEFAULT = { font: 'sans', size: 17, leading: 'normal', measure: 'normal', focus: false, gutter: true };
+  const display = { ...DISPLAY_DEFAULT, ...((data.prefs && data.prefs.display) || {}) };
+  const LEADING = { tight: 1.7, normal: 1.9, loose: 2.15 };
+  const MEASURE = { narrow: '32em', normal: '38em', wide: '46em' };
+  const SIZE_MIN = 14;
+  const SIZE_MAX = 22;
 
   const current = () => data.articles.find((a) => a.id === data.currentId) || null;
   const isLocked = (a) => Boolean(a && S.activeRound(a));
@@ -1960,6 +2093,7 @@ kbd {
     if (st.undo.length > 300) st.undo.shift();
     st.redo = [];
     lastUndoKind = opts.kind || label;
+    syncFormatBar();
   }
 
   function restoreEntry(entry) {
@@ -2030,19 +2164,23 @@ kbd {
   let popover = null;
   function closePopover(restoreFocus = true) {
     if (!popover) return;
-    const { node, anchor, onClose } = popover;
+    const { node, anchor, onClose, returnSel } = popover;
     popover = null;
     node.remove();
     if (anchor) anchor.setAttribute('aria-expanded', 'false');
     document.removeEventListener('pointerdown', onOutside, true);
     if (onClose) onClose();
-    if (restoreFocus && anchor && document.contains(anchor)) anchor.focus({ preventScroll: true });
+    if (!restoreFocus) return;
+    if (returnSel && restoreSel(returnSel)) return;
+    if (anchor && document.contains(anchor)) anchor.focus({ preventScroll: true });
   }
   function onOutside(e) {
     if (popover && !popover.node.contains(e.target) && !(popover.anchor && popover.anchor.contains(e.target))) closePopover(false);
   }
   function openPopover(anchor, html, opts = {}) {
     closePopover(false);
+    const ed = editorEl();
+    const returnSel = ed && ed.isContentEditable && document.activeElement === ed ? editSel() : null;
     const node = document.createElement('div');
     node.className = `popover ${opts.className || ''}`;
     if (opts.role) node.setAttribute('role', opts.role);
@@ -2059,11 +2197,18 @@ kbd {
     node.style.left = `${left}px`;
     node.style.top = `${top}px`;
     if (anchor) anchor.setAttribute('aria-expanded', 'true');
-    popover = { node, anchor, onClose: opts.onClose };
+    popover = { node, anchor, onClose: opts.onClose, returnSel };
     setTimeout(() => document.addEventListener('pointerdown', onOutside, true), 0);
     node.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePopover(true); return; }
-      const items = $$('.menu-item', node);
+      if (e.key === 'Tab' && opts.trapTab) {
+        const f = $$('button, input, select, textarea', node).filter((x) => !x.disabled);
+        const i = f.indexOf(document.activeElement);
+        if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+        else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+        return;
+      }
+      const items = $$('.menu-item:not(:disabled)', node);
       if (!items.length) return;
       const i = items.indexOf(document.activeElement);
       if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
@@ -2072,7 +2217,7 @@ kbd {
       if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
       if (e.key === 'Tab') closePopover(false);
     });
-    const first = opts.focus ? $(opts.focus, node) : $('.menu-item, textarea, input, button', node);
+    const first = opts.focus ? $(opts.focus, node) : $('.menu-item:not(:disabled), textarea, input, button', node);
     if (first) first.focus({ preventScroll: true });
     return node;
   }
@@ -2082,7 +2227,7 @@ kbd {
       if (it === '-') return '<div class="menu-sep" role="separator"></div>';
       if (it.label && it.heading) return `<div class="menu-label">${esc(it.label)}</div>`;
       const role = it.checked !== undefined ? 'menuitemradio' : 'menuitem';
-      return `<button type="button" class="menu-item ${it.danger ? 'danger' : ''}" role="${role}" data-i="${i}" ${it.checked !== undefined ? `aria-checked="${it.checked}"` : ''}>
+      return `<button type="button" class="menu-item ${it.danger ? 'danger' : ''}" role="${role}" data-i="${i}" ${it.checked !== undefined ? `aria-checked="${it.checked}"` : ''} ${it.disabled ? 'disabled' : ''}>
         ${it.icon ? icon(it.icon) : ''}<span class="grow">${esc(it.label)}</span>${it.kbd ? `<kbd>${esc(it.kbd)}</kbd>` : ''}</button>`;
     }).join('')}</div>`;
     const node = openPopover(anchor, html, { ...opts });
@@ -2142,8 +2287,16 @@ kbd {
     const inputValue = input ? input.value : undefined;
     dialogState = null;
     back.remove();
-    if (!silent && prev && document.contains(prev)) prev.focus({ preventScroll: true });
-    if (!silent && onClose) onClose(value, inputValue);
+    if (silent) return;
+    const fromEditor = prev && prev.id === 'editor';
+    if (prev && document.contains(prev) && !fromEditor) prev.focus({ preventScroll: true });
+    if (onClose) onClose(value, inputValue);
+    if (dialogState) return;
+    const lost = !document.activeElement || document.activeElement === document.body || !document.contains(document.activeElement);
+    if (fromEditor && (lost || document.activeElement === editorEl())) {
+      const s = editSel();
+      if (!(s && restoreSel(s)) && prev && document.contains(prev)) prev.focus({ preventScroll: true });
+    }
   }
 
   /* ───────────────────────── 布局 ───────────────────────── */
@@ -2152,6 +2305,10 @@ kbd {
     el.app.classList.toggle('no-sidebar', !ui.sidebarOpen);
     el.app.classList.toggle('no-inspector', !inspectorVisible());
     el.app.dataset.mode = ui.view === 'examples' ? 'examples' : ui.mode;
+    const fb = formatBarVisible();
+    el.app.classList.toggle('has-fb', fb);
+    el.formatbar.hidden = !fb;
+    if (fb) syncFormatBar();
     el.scrim.hidden = !(mqNarrow.matches && ui.sidebarOpen);
     el.sidebar.toggleAttribute('inert', !ui.sidebarOpen);
     el.inspector.toggleAttribute('inert', !inspectorVisible());
@@ -2354,11 +2511,11 @@ kbd {
         ${seg('write', '写作')}${seg('review', '审阅', pending ? '<span class="pip" aria-label="（待审阅）"></span>' : '')}${seg('history', '历史')}
       </div>
       <div class="tb-group" style="flex:1 1 0;justify-content:flex-end">
-        ${ui.mode === 'write' ? `<button type="button" class="icon-btn hide-narrow" data-act="snapshot" aria-label="存为版本" title="存为版本（${K.mod}S）">${icon('i-bookmark')}</button>` : ''}
         ${primary}
         <button type="button" class="icon-btn" data-act="more" aria-haspopup="menu" aria-expanded="false" aria-label="更多">${icon('i-more')}</button>
         <button type="button" class="icon-btn" data-act="inspector" aria-pressed="${ui.inspectorOpen}" aria-label="${ui.inspectorOpen ? '隐藏' : '显示'}检查器" title="检查器">${icon('i-inspector')}</button>
       </div>`;
+    renderFormatBar();
   }
 
   el.toolbar.addEventListener('click', (e) => {
@@ -2391,6 +2548,368 @@ kbd {
     ], { alignRight: true });
   }
 
+  /* ───────────────────────── 编辑工具栏 ─────────────────────────
+   * 写作时常驻在窗口工具栏下方，正文从它下面滚过。只放正文模型真实支持的操作：
+   * 正文是纯文本段落，不提供粗体、标题等格式按钮，以免破坏逐词对比和溯源。
+   */
+
+  const AK = isMac ? 'Meta' : 'Control';
+  const formatBarVisible = () => ui.view === 'article' && ui.mode === 'write' && Boolean(current());
+  const FB_ITEMS = {
+    undo: { icon: 'i-undo', label: '撤销', kbd: `${K.mod}Z`, keys: `${AK}+Z` },
+    redo: { icon: 'i-redo', label: '重做', kbd: `${K.mod}${K.shift}Z`, keys: `${AK}+Shift+Z` },
+    mark: { icon: 'i-mark', label: '标记给 AI 修改', text: '标记', kbd: `${K.mod}${K.shift}M`, keys: `${AK}+Shift+M` },
+    instr: { label: '修改要求', menu: true },
+    up: { icon: 'i-arrow-up', label: '上移段落', kbd: `${K.alt}${K.shift}${K.up}`, keys: 'Alt+Shift+ArrowUp' },
+    down: { icon: 'i-arrow-down', label: '下移段落', kbd: `${K.alt}${K.shift}${K.down}`, keys: 'Alt+Shift+ArrowDown' },
+    save: { icon: 'i-bookmark', label: '存为版本', text: '存为版本', kbd: `${K.mod}S`, keys: `${AK}+S` },
+    prov: { icon: 'i-history', label: '这句话的来历', text: '来历', kbd: `${K.mod}I`, keys: `${AK}+I` },
+    display: { label: '显示设置', menu: true },
+    overflow: { icon: 'i-more', label: '更多编辑操作', menu: true },
+  };
+  let fbRove = 'undo';
+
+  function fbButton(id, cls = '') {
+    const it = FB_ITEMS[id];
+    return `<button type="button" class="fb-btn ${it.text ? 'has-text' : ''} ${cls}" data-fb="${id}" tabindex="-1" aria-label="${esc(it.label)}"${it.keys ? ` aria-keyshortcuts="${it.keys}"` : ''}${it.menu ? ' aria-haspopup="true" aria-expanded="false"' : ''}>${it.icon ? icon(it.icon) : ''}${it.text ? `<span class="fb-label">${esc(it.text)}</span>` : ''}</button>`;
+  }
+
+  function renderFormatBar() {
+    const fb = el.formatbar;
+    if (!formatBarVisible()) {
+      if (fb.dataset.built) { fb.innerHTML = ''; delete fb.dataset.built; }
+      hideTip();
+      return;
+    }
+    if (!fb.dataset.built) {
+      fb.innerHTML = `
+        <div class="fb-group" role="group" aria-label="撤销">${fbButton('undo')}${fbButton('redo')}</div>
+        <span class="fb-sep" aria-hidden="true"></span>
+        <div class="fb-group fb-combo" role="group" aria-label="AI 改稿标记">${fbButton('mark')}<button type="button" class="fb-btn fb-menu" data-fb="instr" tabindex="-1" aria-haspopup="menu" aria-expanded="false" aria-label="修改要求"><span class="fb-label">修改要求</span>${icon('i-chevron-down', 'xs')}</button></div>
+        <span class="fb-sep fb-opt" aria-hidden="true"></span>
+        <div class="fb-group fb-opt" role="group" aria-label="段落">${fbButton('up')}${fbButton('down')}</div>
+        <span class="fb-sep" aria-hidden="true"></span>
+        <div class="fb-group" role="group" aria-label="版本">${fbButton('save')}${fbButton('prov', 'fb-opt')}</div>
+        <div class="fb-spacer"></div>
+        <div class="fb-status" id="fb-status"></div>
+        <div class="fb-group">
+          <button type="button" class="fb-btn fb-menu fb-aa" data-fb="display" tabindex="-1" aria-haspopup="dialog" aria-expanded="false" aria-label="显示设置"><span class="aa" aria-hidden="true">Aa</span>${icon('i-chevron-down', 'xs')}</button>
+          ${fbButton('overflow', 'fb-more')}
+        </div>`;
+      fb.dataset.built = '1';
+    }
+    syncFormatBar();
+  }
+
+  function fbSet(id, o) {
+    const b = el.formatbar.querySelector(`[data-fb="${id}"]`);
+    if (!b) return;
+    b.setAttribute('aria-disabled', o.disabled ? 'true' : 'false');
+    if (o.pressed !== undefined) b.setAttribute('aria-pressed', String(Boolean(o.pressed)));
+    b.dataset.tip = o.tip || FB_ITEMS[id].label;
+    b.dataset.reason = o.disabled ? (o.reason || '') : '';
+    if (b.dataset.reason) b.setAttribute('aria-description', b.dataset.reason);
+    else b.removeAttribute('aria-description');
+    if (o.label) b.setAttribute('aria-label', o.label);
+    if (o.text !== undefined) { const l = $('.fb-label', b); if (l && l.textContent !== o.text) l.textContent = o.text; }
+    if (o.icon) { const u = $('use', b); if (u && u.getAttribute('href') !== `#${o.icon}`) u.setAttribute('href', `#${o.icon}`); }
+  }
+
+  function syncFormatBar() {
+    if (!el.formatbar.dataset.built || !formatBarVisible()) return;
+    const a = current();
+    const round = S.activeRound(a);
+    const running = Boolean(round && round.status === 'running');
+    const locked = Boolean(round);
+    const lockReason = running ? 'AI 正在改稿，正文暂不能编辑' : '审阅完成前，正文保持送审时的样子';
+    const st = stackFor(a.id);
+    const c = locked ? null : editSel();
+    const pids = c ? selectedPids(a, c) : [];
+    const textPids = pids.filter((pid) => a.paragraphs.find((p) => p.id === pid).text.trim());
+    const n = textPids.length;
+    const multi = n > 1;
+    const lastUndo = st.undo[st.undo.length - 1];
+    const lastRedo = st.redo[st.redo.length - 1];
+    const noSel = '先把光标放进正文';
+    const markReason = locked ? lockReason : !c ? noSel : !n ? '空段落不需要改稿' : '';
+
+    fbSet('undo', { disabled: running || !lastUndo, tip: lastUndo ? `撤销${lastUndo.label}` : '撤销', label: lastUndo ? `撤销${lastUndo.label}` : '撤销', reason: running ? lockReason : '没有可以撤销的操作' });
+    fbSet('redo', { disabled: running || !lastRedo, tip: lastRedo ? `重做${lastRedo.label}` : '重做', label: lastRedo ? `重做${lastRedo.label}` : '重做', reason: running ? lockReason : '没有可以重做的操作' });
+
+    const allMarked = n > 0 && textPids.every((pid) => a.marks[pid]);
+    fbSet('mark', {
+      disabled: Boolean(markReason), pressed: allMarked, reason: markReason,
+      icon: allMarked ? 'i-mark-on' : 'i-mark',
+      text: multi ? `标记 ${n} 段` : '标记',
+      label: allMarked ? (multi ? `取消标记所选 ${n} 段` : '取消标记这一段') : (multi ? `标记所选 ${n} 段` : '标记这一段'),
+      tip: allMarked ? (multi ? `取消标记所选 ${n} 段` : '取消标记这一段') : (multi ? `把所选 ${n} 段标记给 AI 修改` : '把这一段标记给 AI 修改'),
+    });
+    const marks = textPids.map((pid) => a.marks[pid]).filter(Boolean);
+    let instrText = '修改要求';
+    if (marks.length) {
+      const labels = new Set(marks.map((m) => S.instructionLabel(m)));
+      instrText = labels.size === 1 ? [...labels][0] : '多种要求';
+    }
+    fbSet('instr', {
+      disabled: Boolean(markReason), reason: markReason, text: clip(instrText, 7),
+      label: marks.length ? `修改要求：${instrText}` : '选择修改要求并标记',
+      tip: marks.length ? `修改要求：${instrText}` : '选择修改要求并标记',
+    });
+    const fb = el.formatbar;
+    fb.querySelector('[data-fb="instr"]').classList.toggle('is-set', marks.length > 0);
+
+    const idx = c ? a.paragraphs.findIndex((p) => p.id === c.pid) : -1;
+    const span = pids.length > 1;
+    const moveReason = (edge) => (locked ? lockReason : !c ? noSel : span ? '一次只能移动一段' : edge);
+    fbSet('up', { disabled: locked || !c || span || idx <= 0, reason: moveReason('已经是第一段') });
+    fbSet('down', { disabled: locked || !c || span || idx >= a.paragraphs.length - 1, reason: moveReason('已经是最后一段') });
+    fbSet('save', { disabled: locked, reason: '改稿进行中，完成本轮后会自动保存定稿' });
+    const provOn = inspectorVisible() && ui.inspectorTab === 'prov';
+    fbSet('prov', { pressed: provOn, tip: provOn ? '收起这句话的来历' : '查看光标所在句子的来历' });
+    fbSet('display', { tip: '显示：字体、字号、行距、栏宽' });
+    fbSet('overflow', { tip: '更多编辑操作' });
+
+    const total = Object.keys(a.marks).length;
+    const status = $('#fb-status', fb);
+    let html;
+    if (locked) html = `${icon('i-lock', 'xs')}<span>${running ? '改稿中' : '待审阅'} · 正文已锁定</span>`;
+    else html = `${c ? `<span>第 ${idx + 1} / ${a.paragraphs.length} 段</span>` : ''}${total ? `<span class="fb-marked">已标记 ${total} 段</span>` : ''}`;
+    if (status.innerHTML !== html) status.innerHTML = html;
+    status.classList.toggle('locked', locked);
+
+    const items = fbItems();
+    const enabled = (b) => b.getAttribute('aria-disabled') !== 'true';
+    const inside = fb.contains(document.activeElement);
+    const pick = items.find((b) => b.dataset.fb === fbRove && (inside || enabled(b))) || items.find(enabled) || items[0];
+    items.forEach((b) => { b.tabIndex = b === pick ? 0 : -1; });
+  }
+
+  const fbItems = () => $$('.fb-btn', el.formatbar).filter((b) => b.offsetParent !== null);
+  function focusFb(b) {
+    if (!b) return;
+    fbItems().forEach((x) => { x.tabIndex = x === b ? 0 : -1; });
+    fbRove = b.dataset.fb;
+    b.focus({ preventScroll: true });
+  }
+  function focusFormatBar() {
+    const items = fbItems();
+    focusFb(items.find((b) => b.dataset.fb === fbRove && b.getAttribute('aria-disabled') !== 'true') || items.find((b) => b.getAttribute('aria-disabled') !== 'true') || items[0]);
+  }
+  function returnToEditor() {
+    const s = editSel();
+    if (s && restoreSel(s)) return;
+    const ed = editorEl();
+    if (ed && ed.isContentEditable) focusEditorEnd();
+    else el.content.focus({ preventScroll: true });
+  }
+
+  function runFormat(id, b, fromEditor) {
+    const a = current();
+    if (!a) return;
+    const wasEditor = fromEditor || document.activeElement === editorEl();
+    const c = editSel();
+    if (id === 'undo') undo();
+    else if (id === 'redo') redo();
+    else if (id === 'mark') markSelection();
+    else if (id === 'instr') { openInstrMenu(b); return; }
+    else if (id === 'up' || id === 'down') {
+      if (!c) return;
+      const i = a.paragraphs.findIndex((p) => p.id === c.pid);
+      moveParagraph(c.pid, i + (id === 'up' ? -1 : 1), 'toolbar');
+    } else if (id === 'save') { saveVersion(); return; }
+    else if (id === 'prov') toggleProvenance();
+    else if (id === 'display') { openDisplay(b); return; }
+    else if (id === 'overflow') { openFbOverflow(b); return; }
+    if (wasEditor && document.activeElement !== editorEl() && !popover && !dialogState) {
+      const s = editSel();
+      if (s) restoreSel(s);
+    }
+  }
+
+  /* 按下时不夺走正文焦点，选区和光标原样保留；输入法组字时放行，让浏览器先把候选文字上屏。 */
+  let fbDownFromEditor = false;
+  el.formatbar.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('.fb-btn')) return;
+    fbDownFromEditor = document.activeElement === editorEl();
+    if (!composing) e.preventDefault();
+  });
+  el.formatbar.addEventListener('click', (e) => {
+    const b = e.target.closest('.fb-btn');
+    if (!b) return;
+    hideTip();
+    const viaKeyboard = e.detail === 0;
+    const fromEditor = !viaKeyboard && fbDownFromEditor;
+    fbDownFromEditor = false;
+    if (b.getAttribute('aria-disabled') === 'true') {
+      if (b.dataset.reason) { announce(b.dataset.reason); showTip(b); }
+      if (fromEditor && document.activeElement !== editorEl()) returnToEditor();
+      return;
+    }
+    if (composing) { announce('请先完成输入法输入'); if (fromEditor) returnToEditor(); return; }
+    fbRove = b.dataset.fb;
+    runFormat(b.dataset.fb, b, fromEditor);
+    if (viaKeyboard && !popover && !dialogState) {
+      const again = fbItems().find((x) => x.dataset.fb === fbRove);
+      if (again && again.getAttribute('aria-disabled') !== 'true') focusFb(again);
+      else focusFormatBar();
+    }
+  });
+  el.formatbar.addEventListener('keydown', (e) => {
+    const b = e.target.closest('.fb-btn');
+    if (!b) return;
+    const items = fbItems();
+    const i = items.indexOf(b);
+    if (e.key === 'ArrowRight') { e.preventDefault(); focusFb(items[(i + 1) % items.length]); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); focusFb(items[(i - 1 + items.length) % items.length]); }
+    else if (e.key === 'Home') { e.preventDefault(); focusFb(items[0]); }
+    else if (e.key === 'End') { e.preventDefault(); focusFb(items[items.length - 1]); }
+    else if (e.key === 'ArrowDown' && b.hasAttribute('aria-haspopup')) { e.preventDefault(); b.click(); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hideTip(); returnToEditor(); }
+  });
+
+  /* —— 工具提示：悬停片刻或用键盘聚焦时显示名称、快捷键和不可用的原因 —— */
+
+  let tipEl = null;
+  let tipTimer = 0;
+  let tipWarmUntil = 0;
+  function showTip(b) {
+    clearTimeout(tipTimer);
+    if (tipEl) tipEl.remove();
+    if (!b.dataset.tip || !document.contains(b)) { tipEl = null; return; }
+    const kbd = FB_ITEMS[b.dataset.fb] && FB_ITEMS[b.dataset.fb].kbd;
+    tipEl = document.createElement('div');
+    tipEl.className = 'tip';
+    tipEl.setAttribute('aria-hidden', 'true');
+    tipEl.dataset.for = b.dataset.fb;
+    tipEl.innerHTML = `<span class="tip-main"><span>${esc(b.dataset.tip)}</span>${kbd ? `<kbd>${esc(kbd)}</kbd>` : ''}</span>${b.dataset.reason ? `<span class="tip-why">${esc(b.dataset.reason)}</span>` : ''}`;
+    el.layer.appendChild(tipEl);
+    const r = b.getBoundingClientRect();
+    const w = tipEl.offsetWidth;
+    tipEl.style.left = `${Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8))}px`;
+    tipEl.style.top = `${r.bottom + 6}px`;
+  }
+  function hideTip() {
+    clearTimeout(tipTimer);
+    if (tipEl) { tipEl.remove(); tipEl = null; tipWarmUntil = Date.now() + 500; }
+  }
+  el.formatbar.addEventListener('pointerover', (e) => {
+    const b = e.target.closest('.fb-btn');
+    if (!b || e.pointerType === 'touch' || popover) return;
+    if (tipEl && tipEl.dataset.for === b.dataset.fb) return;
+    clearTimeout(tipTimer);
+    const warm = tipEl || Date.now() < tipWarmUntil;
+    tipTimer = setTimeout(() => showTip(b), warm ? 0 : 550);
+  });
+  el.formatbar.addEventListener('pointerout', (e) => {
+    const b = e.target.closest('.fb-btn');
+    if (b && !b.contains(e.relatedTarget)) hideTip();
+  });
+  el.formatbar.addEventListener('focusin', (e) => {
+    const b = e.target.closest('.fb-btn');
+    if (b && b.matches(':focus-visible') && !popover) showTip(b);
+  });
+  el.formatbar.addEventListener('focusout', hideTip);
+
+  /* —— 修改要求菜单、收起的操作、显示设置 —— */
+
+  function openInstrMenu(b) {
+    const a = current();
+    const c = editSel();
+    const pids = selectedPids(a, c).filter((pid) => a.paragraphs.find((p) => p.id === pid).text.trim());
+    if (!pids.length) return;
+    const marks = pids.map((pid) => a.marks[pid]);
+    const anyMarked = marks.some(Boolean);
+    const first = marks[0];
+    const uniform = marks.every((m) => m && first && m.instruction === first.instruction && (m.custom || '') === (first.custom || '')) ? first : null;
+    const total = Object.keys(a.marks).length;
+    const items = [
+      { label: pids.length > 1 ? `所选 ${pids.length} 段想怎样修改` : anyMarked ? '想怎样修改这一段' : '选择要求，同时标记这一段', heading: true },
+      ...AI.INSTRUCTIONS.map((it) => ({ label: it.label, checked: Boolean(uniform && !uniform.custom && uniform.instruction === it.id), run: () => applyMarks(pids, it.id) })),
+      { label: uniform && uniform.custom ? `自定义：${clip(uniform.custom, 10)}` : '自定义要求…', checked: Boolean(uniform && uniform.custom), run: () => customInstruction(pids) },
+    ];
+    const selMarked = marks.filter(Boolean).length;
+    if (anyMarked || total) items.push('-');
+    if (anyMarked) items.push({ label: pids.length > 1 ? '取消标记所选段落' : '取消标记', icon: 'i-x', run: () => applyMarks(pids, null) });
+    if (total > selMarked) items.push({ label: `取消全部标记（${total} 段）`, icon: 'i-x', run: clearAllMarks });
+    openMenu(b, items);
+  }
+
+  function openFbOverflow(b) {
+    const item = (id) => {
+      const btn = el.formatbar.querySelector(`[data-fb="${id}"]`);
+      return { label: FB_ITEMS[id].label, icon: FB_ITEMS[id].icon, kbd: FB_ITEMS[id].kbd, disabled: btn.getAttribute('aria-disabled') === 'true', run: () => runFormat(id, btn) };
+    };
+    openMenu(b, [item('up'), item('down'), '-', item('prov')], { alignRight: true });
+  }
+
+  function toggleProvenance() {
+    if (inspectorVisible() && ui.inspectorTab === 'prov') {
+      ui.inspectorTab = 'marks';
+      if (mqMid.matches) ui.inspectorOpen = false;
+      clearHighlight('prov');
+      renderInspector();
+      applyLayout();
+      renderToolbar();
+      return;
+    }
+    openProvenance();
+  }
+
+  function applyDisplay() {
+    const s = el.app.style;
+    s.setProperty('--read-size', `${display.size}px`);
+    s.setProperty('--read-lh', String(LEADING[display.leading] || LEADING.normal));
+    s.setProperty('--measure', MEASURE[display.measure] || MEASURE.normal);
+    el.app.dataset.font = display.font;
+    el.app.classList.toggle('focus-mode', Boolean(display.focus));
+    el.app.classList.toggle('no-para-ctl', !display.gutter);
+    requestAnimationFrame(() => { renderGutter(); if (ui.mode === 'review') positionHunkBar(); });
+  }
+
+  function displayHTML() {
+    const seg = (key, opts) => `<div class="segmented small" role="radiogroup" aria-labelledby="dk-${key}">${opts.map(([v, l]) => `<button type="button" role="radio" aria-checked="${display[key] === v}" data-disp="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
+    const sw = (key, label, hint) => `<button type="button" class="disp-switch" role="switch" aria-checked="${Boolean(display[key])}" data-disp="${key}"><span class="grow"><span class="l">${label}</span><span class="h">${hint}</span></span><span class="sw" aria-hidden="true"></span></button>`;
+    const isDefault = Object.keys(DISPLAY_DEFAULT).every((k) => display[k] === DISPLAY_DEFAULT[k]);
+    return `<div class="disp">
+      <div class="disp-title">显示<span>只影响阅读与书写，不改动正文</span></div>
+      <div class="disp-row"><span class="disp-k" id="dk-font">字体</span>${seg('font', [['sans', '无衬线'], ['serif', '衬线']])}</div>
+      <div class="disp-row"><span class="disp-k" id="dk-size">字号</span><div class="stepper" role="group" aria-labelledby="dk-size">
+        <button type="button" data-disp="size" data-v="-1" aria-label="减小字号" ${display.size <= SIZE_MIN ? 'disabled' : ''}><span class="a-sm" aria-hidden="true">A</span></button>
+        <output aria-live="polite">${display.size}</output>
+        <button type="button" data-disp="size" data-v="1" aria-label="增大字号" ${display.size >= SIZE_MAX ? 'disabled' : ''}><span class="a-lg" aria-hidden="true">A</span></button>
+      </div></div>
+      <div class="disp-row"><span class="disp-k" id="dk-leading">行距</span>${seg('leading', [['tight', '紧凑'], ['normal', '标准'], ['loose', '宽松']])}</div>
+      <div class="disp-row"><span class="disp-k" id="dk-measure">栏宽</span>${seg('measure', [['narrow', '窄'], ['normal', '标准'], ['wide', '宽']])}</div>
+      <div class="menu-sep"></div>
+      ${sw('focus', '专注当前段落', '其他段落变淡')}
+      ${sw('gutter', '段落旁的快捷控件', '悬停时显示拖动手柄和标记圆点')}
+      <div class="disp-foot"><button type="button" class="btn ghost" data-disp="reset" ${isDefault ? 'disabled' : ''}>恢复默认</button></div>
+    </div>`;
+  }
+
+  function openDisplay(b) {
+    const node = openPopover(b, displayHTML(), { className: 'disp-pop', role: 'dialog', label: '显示设置', trapTab: true, alignRight: true, focus: '[role="radio"][aria-checked="true"]' });
+    node.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-disp]');
+      if (!t || t.disabled) return;
+      const k = t.dataset.disp;
+      if (k === 'size') display.size = Math.max(SIZE_MIN, Math.min(SIZE_MAX, display.size + Number(t.dataset.v)));
+      else if (k === 'focus' || k === 'gutter') display[k] = !display[k];
+      else if (k === 'reset') Object.assign(display, DISPLAY_DEFAULT);
+      else display[k] = t.dataset.v;
+      applyDisplay();
+      save();
+      const sel = `[data-disp="${k}"]${t.dataset.v ? `[data-v="${t.dataset.v}"]` : ''}`;
+      node.innerHTML = displayHTML();
+      const again = $(sel, node);
+      (again && !again.disabled ? again : $('[role="radio"][aria-checked="true"]', node)).focus({ preventScroll: true });
+    });
+  }
+
+  el.content.addEventListener('focusin', (e) => {
+    if (e.target.id === 'title-input') { ui.sel = null; syncFormatBar(); }
+  });
+
   function setMode(mode) {
     const a = current();
     if (!a) return;
@@ -2417,11 +2936,16 @@ kbd {
     else if (ui.mode === 'review') renderReview(a);
     else if (ui.mode === 'history') renderHistory(a);
     else renderWrite(a);
-    el.content.onscroll = () => el.toolbar.classList.toggle('scrolled', el.content.scrollTop > 4);
+    const markScrolled = () => {
+      const s = el.content.scrollTop > 4;
+      el.toolbar.classList.toggle('scrolled', s);
+      el.formatbar.classList.toggle('scrolled', s);
+    };
+    el.content.onscroll = () => { markScrolled(); hideTip(); };
     if (renderContent.sameView === `${ui.view}:${data.currentId}:${ui.mode}`) el.content.scrollTop = keepScroll;
     else el.content.scrollTop = 0;
     renderContent.sameView = `${ui.view}:${data.currentId}:${ui.mode}`;
-    el.toolbar.classList.toggle('scrolled', el.content.scrollTop > 4);
+    markScrolled();
   }
 
   function renderNoArticle() {
@@ -2491,9 +3015,12 @@ kbd {
     if (!a || !ed) return;
     const only = a.paragraphs.length === 1;
     const run = ui.running && ui.running.articleId === a.id ? ui.running : null;
+    const cur = ui.caret && ui.caret.pid;
+    ed.classList.toggle('has-current', Boolean(cur && a.paragraphs.some((p) => p.id === cur)));
     $$('p', ed).forEach((p) => {
       const pid = p.dataset.pid;
       const text = p.textContent;
+      p.classList.toggle('is-current', pid === cur);
       p.classList.toggle('is-marked', Boolean(a.marks[pid]));
       p.classList.toggle('is-empty', !text);
       p.classList.toggle('is-revising', Boolean(run && run.current === pid));
@@ -2612,11 +3139,54 @@ kbd {
     let rect = range.getBoundingClientRect();
     if (!rect || (!rect.height && fallback)) rect = fallback.getBoundingClientRect();
     const box = el.content.getBoundingClientRect();
-    const topLimit = box.top + 64;
+    const topLimit = box.top + el.toolbar.offsetHeight + (formatBarVisible() ? el.formatbar.offsetHeight : 0) + 12;
     const bottomLimit = box.bottom - 48;
     if (rect.bottom > bottomLimit) el.content.scrollTop += rect.bottom - bottomLimit + 24;
     else if (rect.top < topLimit) el.content.scrollTop -= topLimit - rect.top + 24;
   }
+  /* 最近一次在正文里的选区。焦点移到工具栏、弹层或对话框后，操作仍作用于它，结束后再放回原处。 */
+  function editSel() {
+    const a = current();
+    const act = document.activeElement;
+    if (act && (act.tagName === 'INPUT' || act.tagName === 'TEXTAREA') && act.closest('#content')) return null;
+    const live = getCaret();
+    if (live) return live;
+    const s = ui.sel;
+    if (!a || !s) return null;
+    const has = (pid) => a.paragraphs.some((p) => p.id === pid);
+    if (!has(s.pid)) return null;
+    return has(s.endPid) ? s : { ...s, endPid: s.pid, endOffset: s.offset, collapsed: true };
+  }
+  function restoreSel(c) {
+    const ed = editorEl();
+    if (!ed || !ed.isContentEditable || !c) return false;
+    const sp = ed.querySelector(`p[data-pid="${CSS.escape(c.pid)}"]`);
+    if (!sp) return false;
+    const ep = ed.querySelector(`p[data-pid="${CSS.escape(c.endPid || c.pid)}"]`) || sp;
+    const a = current();
+    const clamp = (pid, n) => { const p = a.paragraphs.find((x) => x.id === pid); return Math.min(n || 0, p ? p.text.length : 0); };
+    const start = rangeIn(sp, clamp(c.pid, c.offset), clamp(c.pid, c.offset));
+    const end = rangeIn(ep, clamp(ep.dataset.pid, c.endOffset), clamp(ep.dataset.pid, c.endOffset));
+    const range = document.createRange();
+    range.setStart(start.startContainer, start.startOffset);
+    range.setEnd(end.startContainer, end.startOffset);
+    ed.focus({ preventScroll: true });
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return true;
+  }
+  function selectedPids(a, c) {
+    if (!a || !c) return [];
+    const i1 = a.paragraphs.findIndex((p) => p.id === c.pid);
+    let i2 = a.paragraphs.findIndex((p) => p.id === (c.endPid || c.pid));
+    if (i1 < 0) return [];
+    if (i2 < i1) i2 = i1;
+    let ids = a.paragraphs.slice(i1, i2 + 1);
+    if (ids.length > 1 && !c.collapsed && c.endOffset === 0) ids = ids.slice(0, -1);
+    return ids.map((p) => p.id);
+  }
+
   function focusEditorEnd() {
     const a = current();
     const ed = editorEl();
@@ -2774,14 +3344,23 @@ kbd {
     if (from < 0) return;
     const target = Math.max(0, Math.min(a.paragraphs.length - 1, toIndex));
     if (target === from) return;
-    const c = getCaret();
+    const editorFocused = document.activeElement === editorEl();
+    const c = editSel();
     pushUndo('移动段落', { caret: c });
     const [p] = a.paragraphs.splice(from, 1);
     a.paragraphs.splice(target, 0, p);
     touch(a);
     renderEditorParas();
-    if (c && c.pid === pid) setCaret(pid, c.offset);
-    else if (via === 'drag') setCaret(pid, 0);
+    if (c && c.pid === pid && (editorFocused || via !== 'toolbar')) {
+      if (c.endPid === pid) setCaret(pid, c.offset, c.endOffset);
+      else setCaret(pid, c.offset);
+    } else if (via === 'drag') setCaret(pid, 0);
+    if (c && c.pid === pid) {
+      ui.sel = c.endPid === pid ? { ...c } : { ...c, endPid: pid, endOffset: c.offset, collapsed: true };
+      ui.caret = { pid, offset: c.offset };
+      const node = editorEl().querySelector(`p[data-pid="${CSS.escape(pid)}"]`);
+      if (node && !editorFocused) scrollRangeIntoView(rangeIn(node, c.offset, c.offset), node);
+    }
     flashParagraph(pid);
     announce(`已移到第 ${target + 1} 段`);
     afterTextChange();
@@ -2815,7 +3394,7 @@ kbd {
     const want = force !== undefined ? force : !marked;
     if (want === marked) return;
     if (want && !p.text.trim()) { toast('空段落不需要改稿'); return; }
-    const c = getCaret();
+    const c = editSel();
     pushUndo(want ? '标记段落' : '取消标记', { caret: c });
     if (want) a.marks[pid] = { instruction: 'concise' };
     else delete a.marks[pid];
@@ -2831,11 +3410,53 @@ kbd {
   function setInstruction(pid, instruction, custom) {
     const a = current();
     if (!a || !a.marks[pid]) return;
-    pushUndo('修改要求', { caret: getCaret() });
+    pushUndo('修改要求', { caret: editSel() });
     a.marks[pid] = { instruction, custom: custom || '' };
     touch(a);
     updateDecor();
     renderInspector();
+    syncFormatBar();
+  }
+
+  /* 一次设置多段的标记和要求，作为一步撤销。instruction 为 null 时取消标记。 */
+  function applyMarks(pids, instruction, custom = '') {
+    const a = current();
+    if (!a || isLocked(a)) return;
+    const targets = pids.filter((pid) => {
+      const p = a.paragraphs.find((x) => x.id === pid);
+      return p && (instruction ? p.text.trim() : a.marks[pid]);
+    });
+    if (!targets.length) { if (instruction) toast('空段落不需要改稿'); return; }
+    const relabel = instruction && targets.every((pid) => a.marks[pid]);
+    pushUndo(!instruction ? '取消标记' : relabel ? '修改要求' : '标记段落', { caret: editSel() });
+    for (const pid of targets) {
+      if (instruction) a.marks[pid] = { instruction, custom: instruction === 'custom' ? custom : '' };
+      else delete a.marks[pid];
+    }
+    touch(a);
+    updateDecor();
+    renderToolbar();
+    renderInspector();
+    renderSidebar();
+    const label = instruction ? S.instructionLabel(a.marks[targets[0]]) : '';
+    const where = targets.length > 1 ? `${targets.length} 段` : `第 ${a.paragraphs.findIndex((x) => x.id === targets[0]) + 1} 段`;
+    announce(!instruction ? `已取消标记${where}` : relabel ? `${where}的要求改为：${label}` : `已标记${where}，要求：${label}`);
+  }
+
+  function markSelection() {
+    const a = current();
+    const c = editSel();
+    if (!a || !c || isLocked(a)) return;
+    const pids = selectedPids(a, c).filter((pid) => a.paragraphs.find((p) => p.id === pid).text.trim());
+    if (!pids.length) { toast('空段落不需要改稿'); return; }
+    if (pids.every((pid) => a.marks[pid])) applyMarks(pids, null);
+    else applyMarks(pids.filter((pid) => !a.marks[pid]), 'concise');
+  }
+
+  function clearAllMarks() {
+    const a = current();
+    if (!a) return;
+    applyMarks(Object.keys(a.marks), null);
   }
 
   function openChipMenu(chip, pid) {
@@ -2851,16 +3472,17 @@ kbd {
     openMenu(chip, items);
   }
 
-  function customInstruction(pid) {
+  function customInstruction(pidOrPids) {
     const a = current();
-    const mark = a.marks[pid];
+    const pids = [].concat(pidOrPids);
+    const mark = a.marks[pids[0]] || {};
     openDialog({
       title: '自定义修改要求',
-      body: `<p>用一句话告诉 AI 你希望这一段怎样改。原型里的模拟服务不会理解这句话：示例段落仍使用预置改法，其他段落只做简单规则精简。</p>
+      body: `<p>用一句话告诉 AI 你希望${pids.length > 1 ? `这 ${pids.length} 段` : '这一段'}怎样改。原型里的模拟服务不会理解这句话：示例段落仍使用预置改法，其他段落只做简单规则精简。</p>
         <div class="field"><input type="text" value="${esc(mark.custom || '')}" placeholder="例如：保留口语感，只删重复的词" aria-label="修改要求"></div>`,
       actions: [{ label: '取消', value: null }, { label: '确定', value: 'ok', primary: true }],
       onClose: (v, text) => {
-        if (v === 'ok' && text && text.trim()) setInstruction(pid, 'custom', text.trim());
+        if (v === 'ok' && text && text.trim()) applyMarks(pids, 'custom', text.trim());
       },
     });
   }
@@ -3049,8 +3671,18 @@ kbd {
     const c = getCaret();
     if (!c) return;
     const changedPid = !ui.caret || ui.caret.pid !== c.pid;
+    const changedSpan = !ui.sel || ui.sel.endPid !== c.endPid || ui.sel.collapsed !== c.collapsed;
     ui.caret = { pid: c.pid, offset: c.offset };
-    if (changedPid) refreshGutterVisibility();
+    ui.sel = c;
+    if (changedPid) {
+      refreshGutterVisibility();
+      const ed = editorEl();
+      if (ed) {
+        ed.classList.add('has-current');
+        $$('p', ed).forEach((p) => p.classList.toggle('is-current', p.dataset.pid === c.pid));
+      }
+    }
+    if (changedPid || changedSpan) syncFormatBar();
     clearTimeout(selTimer);
     selTimer = setTimeout(() => {
       const prev = ui.provSel;
@@ -3735,6 +4367,7 @@ kbd {
     }
     if (ui.mode === 'write' && ui.inspectorTab === 'prov') computeProvSelHighlightOnly();
     else clearHighlight('prov');
+    syncFormatBar();
   }
 
   function computeProvSelHighlightOnly() {
@@ -4084,12 +4717,13 @@ kbd {
       wide: true,
       body: `<table class="shortcut-table">
         <tr><th colspan="2">写作</th></tr>
-        ${row('标记或取消标记当前段落', [`${K.mod}${K.shift}M`])}
+        ${row('标记或取消标记当前段落（选中多段时一起处理）', [`${K.mod}${K.shift}M`])}
         ${row('上移、下移当前段落', [`${K.alt}${K.shift}${K.up}`, `${K.alt}${K.shift}${K.down}`])}
         ${row('请 AI 改稿', [`${K.mod}${K.enter}`])}
         ${row('查看光标所在句子的来历', [`${K.mod}I`])}
         ${row('存为版本', [`${K.mod}S`])}
         ${row('撤销、重做', [`${K.mod}Z`, `${K.mod}${K.shift}Z`])}
+        ${row('移到编辑工具栏（方向键选择，Esc 回到正文）', [`${K.alt}F10`])}
         <tr><th colspan="2">审阅</th></tr>
         ${row('下一处、上一处修改', ['J', 'K'])}
         ${row('采用改法', ['A'])}
@@ -4110,7 +4744,7 @@ kbd {
       wide: true,
       body: `<p>Redraft 是以 Diff 为核心的写作编辑器。这个网页原型用来体验它的交互：写作、标记、改稿、对照取舍、回看历史。正式产品计划为原生 macOS 应用。</p>
         <ul class="about-list">
-          <li><b>真实运行：</b>编辑、分段、拖动段落、撤销重做、标记、版本快照、任意两稿对比、逐句溯源、改写范例、Markdown 导出。文本对比在浏览器里实时计算：段落按稳定 ID 对齐，再用系统分词（Intl.Segmenter）逐词比较。</li>
+          <li><b>真实运行：</b>编辑、分段、拖动段落、编辑工具栏与显示设置、撤销重做、标记、版本快照、任意两稿对比、逐句溯源、改写范例、Markdown 导出。文本对比在浏览器里实时计算：段落按稳定 ID 对齐，再用系统分词（Intl.Segmenter）逐词比较。</li>
           <li><b>模拟：</b>AI 改稿。示例段落使用预置改法和说明；其他段落只做删赘词等本地规则精简，并如实标注。没有任何网络请求，也不需要账号或密钥。</li>
           <li><b>保存：</b>内容只保存在这个浏览器的本地存储中。可以在“更多”菜单里恢复示例数据。</li>
         </ul>`,
@@ -4135,6 +4769,8 @@ kbd {
       if (mqMid.matches && ui.inspectorOpen && inspectorVisible()) { ui.inspectorOpen = false; applyLayout(); renderToolbar(); return; }
     }
 
+    if (e.altKey && e.key === 'F10' && formatBarVisible()) { e.preventDefault(); focusFormatBar(); return; }
+
     if (mod && !e.altKey) {
       if (key === 'z' && !inField) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if (key === 'y' && !isMac && !inField) { e.preventDefault(); redo(); return; }
@@ -4143,8 +4779,7 @@ kbd {
       if (key === 'i' && ui.view === 'article') { e.preventDefault(); openProvenance(); return; }
       if (key === 'm' && e.shiftKey && ui.view === 'article' && ui.mode === 'write') {
         e.preventDefault();
-        const c = getCaret() || ui.caret;
-        if (c) toggleMark(c.pid);
+        markSelection();
         return;
       }
       if (e.key === 'Enter' && ui.view === 'article') {
@@ -4179,6 +4814,8 @@ kbd {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       closePopover(false);
+      hideTip();
+      syncFormatBar();
       renderGutter();
       if (ui.mode === 'review') positionHunkBar();
     }, 80);
@@ -4190,7 +4827,8 @@ kbd {
 
   /* ───────────────────────── 启动 ───────────────────────── */
 
-  window.__redraft = { get data() { return data; }, ui };
+  window.__redraft = { get data() { return data; }, ui, display };
+  applyDisplay();
   renderAll();
 })();
 </script>
