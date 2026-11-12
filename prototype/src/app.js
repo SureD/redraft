@@ -11,6 +11,7 @@
   const R = window.RedraftRich;
 
   const STORAGE_KEY = 'redraft.prototype.v1';
+  const PALETTE_KEY = 'redraft.palette';
   const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent);
   const K = isMac
     ? { mod: '⌘', shift: '⇧', alt: '⌥', enter: '↩', up: '↑', down: '↓' }
@@ -607,8 +608,23 @@
       { label: '键盘快捷键', icon: 'i-keyboard', kbd: `${K.mod}/`, run: showShortcuts },
       { label: '关于此原型', icon: 'i-info', run: showAbout },
       '-',
+      { label: '配色', heading: true },
+      { label: '纸面', checked: palette() === 'paper', run: () => setPalette('paper') },
+      { label: '上一版', checked: palette() === 'classic', run: () => setPalette('classic') },
+      '-',
       { label: '恢复示例数据', icon: 'i-reset', run: resetSamples },
-    ], { alignRight: true });
+    ], { alignRight: true, focus: '.menu-item:not(:disabled)' });
+  }
+
+  function palette() {
+    return document.documentElement.dataset.palette === 'classic' ? 'classic' : 'paper';
+  }
+
+  function setPalette(id) {
+    if (id === 'classic') document.documentElement.dataset.palette = 'classic';
+    else delete document.documentElement.dataset.palette;
+    try { localStorage.setItem(PALETTE_KEY, id); } catch (_) { /* 忽略 */ }
+    announce(id === 'classic' ? '已切换到上一版配色' : '已切换到纸面配色');
   }
 
   /* ───────────────────────── 排版工具栏 ─────────────────────────
