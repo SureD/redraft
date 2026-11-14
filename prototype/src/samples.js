@@ -71,6 +71,49 @@
     return a;
   }
 
+  /** 图文表示例：两张自绘插图、一张阳台作物表；图片、表格和一段文字已标记，可直接送审体验混合审阅。 */
+  function balcony() {
+    const ART = global.RedraftSampleArt;
+    const img = (pid, asset, caption, w, alt) => ({ id: pid, kind: 'img', text: caption, img: { asset, w, alt, iw: ART[asset].iw, ih: ART[asset].ih } });
+    const table = (pid, rows) => ({
+      id: pid,
+      kind: 'table',
+      text: '',
+      table: {
+        cols: ['tm', 'tp', 'ts', 'tn'],
+        head: true,
+        rows: rows.map(([id, ...cells]) => ({ id, cells: Object.fromEntries(['tm', 'tp', 'ts', 'tn'].map((c, i) => [c, cells[i]]).filter(([, v]) => v)) })),
+      },
+    });
+    const head = ['rh', '月份', '作物', '状态', '备注'];
+    const draft = [
+      { id: 'g1', text: '搬进这间小屋的第一个春天，我在朝南的阳台上摆了三个花盆。原本没指望它们能活过夏天。' },
+      img('g2', 'sample-balcony', '三月的阳台，三个花盆刚刚摆好', 'l', '阳台上排着三个陶土花盆'),
+      { id: 'g3', text: '种了什么', type: 'h2' },
+      table('g4', [head, ['r3', '三月', '薄荷', '发芽', '我觉得长得非常非常慢'], ['r4', '四月', '番茄', '开花', '每天浇水']]),
+      { id: 'g5', text: '番茄开花之后，我每天早上起来的第一件事情，就是去阳台上面看看它有没有结果。' },
+    ];
+    const paras = [
+      ...draft.slice(0, 3),
+      table('g4', [head, ['r3', '三月', '薄荷', '发芽', '我觉得长得非常非常慢'], ['r4', '四月', '番茄', '开花', '其实每天都要浇水'], ['r5', '五月', '罗勒', '收获', '摘了一把做青酱']]),
+      draft[4],
+      img('g6', 'sample-basil', '罗勒的新叶', 'm', '一株罗勒的嫩叶特写'),
+      { id: 'g7', text: '明年想试试辣椒。' },
+    ].map(R.sanitize);
+    const a = {
+      id: 'art-balcony',
+      title: '阳台的一年',
+      createdAt: t('2026-11-12T20:10:00+08:00'),
+      updatedAt: t('2026-11-13T21:36:00+08:00'),
+      paragraphs: paras,
+      marks: { g2: { instruction: 'concise' }, g4: { instruction: 'concise' }, g5: { instruction: 'concise' } },
+      versions: [],
+      rounds: [],
+    };
+    a.versions.push({ id: 'v-balcony-1', kind: 'snapshot', name: '初稿', at: a.createdAt, title: a.title, paragraphs: draft.map(R.sanitize) });
+    return a;
+  }
+
   function runRound(a, marks, at, decide) {
     a.marks = marks;
     const round = S.beginRound(a, at);
@@ -150,12 +193,13 @@
     ]);
 
     const day = diary();
+    const garden = balcony();
     return {
-      schema: 4,
-      articles: [day, letter, shop, notebook],
-      currentId: day.id,
+      schema: 5,
+      articles: [garden, day, letter, shop, notebook],
+      currentId: garden.id,
     };
   }
 
-  global.RedraftSamples = { build, diary };
+  global.RedraftSamples = { build, diary, balcony };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -9,6 +9,7 @@
   const AI = window.RedraftMockAI;
   const S = window.RedraftSession;
   const R = window.RedraftRich;
+  const B = window.RedraftBlocks;
 
   const STORAGE_KEY = 'redraft.prototype.v1';
   const PALETTE_KEY = 'redraft.palette';
@@ -26,6 +27,7 @@
   const icon = (id, cls = '') => `<svg class="icon ${cls}" aria-hidden="true"><use href="#${id}"/></svg>`;
   const clip = (s, n) => { const a = [...(s || '')]; return a.length > n ? `${a.slice(0, n).join('')}…` : (s || ''); };
   const charCount = (paras) => paras.reduce((n, p) => n + [...p.text.replace(/\s/g, '')].length, 0);
+  const isBlock = (p) => window.RedraftBlocks.isBlock(p);
 
   const el = {
     app: $('#app'),
@@ -47,12 +49,13 @@
   /* ───────────────────────── 数据与持久化 ───────────────────────── */
 
   /*
-   * 第 3 版数据是纯文本段落，原样可用：逐段清理无效的排版字段后升到第 4 版，文字和历史一律保留。
-   * 升级时如果文库里还没有带排版的示例文章，就补上这一篇，其余文章不动。
+   * 第 3 版数据是纯文本段落，第 4 版加了排版，第 5 版加了图片和表格段落；旧数据原样可用：
+   * 逐段清理无效字段后升到第 5 版，文字和历史一律保留。
+   * 升级时补上文库里还没有的示例文章（带排版的日记、图文表的阳台），其余文章不动。
    * 认不出的数据不会被覆盖：先另存一份备份，再从示例数据开始。
    */
   function migrate(d) {
-    if (!d || !Array.isArray(d.articles) || (d.schema !== 3 && d.schema !== 4)) return null;
+    if (!d || !Array.isArray(d.articles) || ![3, 4, 5].includes(d.schema)) return null;
     for (const a of d.articles) {
       a.paragraphs = (a.paragraphs || []).map(R.sanitize);
       if (!a.paragraphs.length) a.paragraphs = [{ id: S.uid('p'), text: '' }];
@@ -66,7 +69,12 @@
       d.articles.unshift(diary);
       d.currentId = diary.id;
     }
-    d.schema = 4;
+    if (d.schema < 5 && !d.articles.some((a) => a.id === 'art-balcony')) {
+      const garden = window.RedraftSamples.balcony();
+      d.articles.unshift(garden);
+      d.currentId = garden.id;
+    }
+    d.schema = 5;
     if (d.prefs) delete d.prefs.display;
     return d;
   }
@@ -85,11 +93,20 @@
   }
 
   let data = load();
+  B.collectGarbage(data);
   let saveTimer = 0;
+  let saveFailed = false;
+  const isQuota = (err) => err && (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED' || err.code === 22);
   function save() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, prefs: { diffLayout: ui.diffLayout } })); } catch (_) { /* 忽略 */ }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...data, prefs: { diffLayout: ui.diffLayout } }));
+        saveFailed = false;
+      } catch (err) {
+        if (!saveFailed) toast(isQuota(err) ? '存储空间已满，最近的修改没有保存' : '无法保存到本机');
+        saveFailed = true;
+      }
     }, 250);
   }
 
@@ -113,6 +130,8 @@
     sel: null,
     hoverPid: null,
     provSel: null,
+    blockSel: null,
+    cell: null,
   };
 
   const current = () => data.articles.find((a) => a.id === data.currentId) || null;
@@ -154,7 +173,7 @@
     const a = current();
     if (!a) return;
     const st = stackFor(a.id);
-    st.undo.push({ label, article: S.clone(a), mode: ui.mode, focusKey: ui.focusKey, caret: opts.caret !== undefined ? opts.caret : getCaret() });
+    st.undo.push({ label, article: S.clone(a), mode: ui.mode, focusKey: ui.focusKey, caret: opts.caret !== undefined ? opts.caret : anyCaret() });
     if (st.undo.length > 300) st.undo.shift();
     st.redo = [];
     lastUndoKind = opts.kind || label;
@@ -172,13 +191,14 @@
     renderAll();
     if (ui.mode === 'write' && entry.caret) {
       const c = entry.caret;
-      if (c.endPid && !c.collapsed && restoreSel(c)) ui.sel = c;
+      if (c.block) restoreBlockCaret(c);
+      else if (c.endPid && !c.collapsed && restoreSel(c)) ui.sel = c;
       else setCaret(c.pid, c.offset);
     }
   }
 
   /* 撤销打字和排版时不弹提示，和系统编辑器一样安静；撤销送审、定稿这类大步骤时才提示，并给出重做。 */
-  const LOUD_UNDO = new Set(['送审', '生成定稿', '存为版本', '移动段落', '采用改法', '保留原句', '自己重写', '取消决定', '本段全部采用', '本段全部保留']);
+  const LOUD_UNDO = new Set(['送审', '生成定稿', '存为版本', '移动段落', '采用改法', '保留原句', '自己重写', '取消决定', '本段全部采用', '本段全部保留', '删除图片', '删除表格']);
 
   function undo() {
     const a = current();
@@ -187,7 +207,7 @@
     const st = stackFor(a.id);
     const entry = st.undo.pop();
     if (!entry) { announce('没有可以撤销的操作'); return; }
-    st.redo.push({ label: entry.label, article: S.clone(a), mode: ui.mode, focusKey: ui.focusKey, caret: getCaret() });
+    st.redo.push({ label: entry.label, article: S.clone(a), mode: ui.mode, focusKey: ui.focusKey, caret: anyCaret() });
     lastUndoKind = null;
     pending = null;
     restoreEntry(entry);
@@ -201,7 +221,7 @@
     const st = stackFor(a.id);
     const entry = st.redo.pop();
     if (!entry) { announce('没有可以重做的操作'); return; }
-    st.undo.push({ label: entry.label, article: S.clone(a), mode: ui.mode, focusKey: ui.focusKey, caret: getCaret() });
+    st.undo.push({ label: entry.label, article: S.clone(a), mode: ui.mode, focusKey: ui.focusKey, caret: anyCaret() });
     lastUndoKind = null;
     pending = null;
     restoreEntry(entry);
@@ -237,7 +257,7 @@
   let popover = null;
   function closePopover(restoreFocus = true) {
     if (!popover) return;
-    const { node, anchor, onClose, returnSel } = popover;
+    const { node, anchor, onClose, returnSel, returnEl } = popover;
     popover = null;
     node.remove();
     if (anchor) anchor.setAttribute('aria-expanded', 'false');
@@ -245,6 +265,7 @@
     if (onClose) onClose();
     if (!restoreFocus) return;
     if (returnSel && restoreSel(returnSel)) return;
+    if (returnEl && document.contains(returnEl)) { returnEl.focus({ preventScroll: true }); return; }
     if (anchor && document.contains(anchor)) anchor.focus({ preventScroll: true });
   }
   function onOutside(e) {
@@ -255,6 +276,7 @@
     const ed = editorEl();
     const returnSel = ed && ed.isContentEditable && document.activeElement === ed ? editSel() : null;
     if (returnSel) ui.sel = returnSel;
+    const returnEl = !returnSel && inBlockEl(document.activeElement) ? document.activeElement : null;
     const node = document.createElement('div');
     node.className = `popover ${opts.className || ''}`;
     if (opts.role) node.setAttribute('role', opts.role);
@@ -271,7 +293,7 @@
     node.style.left = `${left}px`;
     node.style.top = `${top}px`;
     if (anchor) anchor.setAttribute('aria-expanded', 'true');
-    popover = { node, anchor, onClose: opts.onClose, returnSel };
+    popover = { node, anchor, onClose: opts.onClose, returnSel, returnEl };
     setTimeout(() => document.addEventListener('pointerdown', onOutside, true), 0);
     node.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePopover(true); return; }
@@ -417,7 +439,7 @@
     } else {
       el.list.innerHTML = arts.map((a) => {
         const st = articleStatus(a);
-        const snippet = (a.paragraphs.find((p) => p.text.trim()) || {}).text || '还没有正文';
+        const snippet = (a.paragraphs.find((p) => !isBlock(p) && p.text.trim()) || {}).text || '还没有正文';
         const curr = ui.view === 'article' && a.id === data.currentId;
         return `<li class="row-wrap">
           <button type="button" class="article-row" data-open="${a.id}" aria-current="${curr}">
@@ -655,6 +677,8 @@
     outdent: { icon: 'i-outdent', label: '减少缩进', kbd: `${K.mod}[`, keys: `${AK}+BracketLeft` },
     indent: { icon: 'i-indent', label: '增加缩进', kbd: `${K.mod}]`, keys: `${AK}+BracketRight` },
     clear: { icon: 'i-clear', label: '清除格式', kbd: `${K.mod}\\`, keys: `${AK}+Backslash` },
+    image: { icon: 'i-image', label: '插入图片' },
+    table: { icon: 'i-table', label: '插入表格', menu: true },
     mark: { icon: 'i-revise', label: '标记给 AI 改稿', kbd: `${K.mod}${K.shift}M`, keys: `${AK}+Shift+M`, menu: true },
     more: { icon: 'i-more', label: '更多', menu: true },
   };
@@ -699,7 +723,8 @@
           ${g('字体与字号', ['font', 'sizeDown', 'size', 'sizeUp'])}${sep}
           ${g('文字样式', ['b', 'i', 'u', 's', 'color', 'hl'])}${sep}
           ${g('段落', ['align', 'lh', 'ul', 'ol', 'outdent', 'indent'])}${sep}
-          ${g('清除', ['clear'])}
+          ${g('清除', ['clear'])}${sep}
+          ${g('插入', ['image', 'table'])}
         </div>
         <div class="fb-end">
           <span class="fb-lock" id="fb-lock" hidden>${icon('i-lock', 'xs')}<span></span></span>
@@ -783,8 +808,11 @@
     fbSet('outdent', { disabled: off || st.indentMax === 0 });
     fbSet('indent', { disabled: off || st.indentMin >= R.INDENT_MAX });
     fbSet('clear', { disabled: off });
+    const inTable = (() => { const blk = inBlockEl(document.activeElement) || (ui.blockSel && blockNode(ui.blockSel)); return Boolean(blk && blk.dataset.block === 'table'); })();
+    fbSet('image', { disabled: locked });
+    fbSet('table', { disabled: locked, label: inTable ? '表格' : '插入表格' });
 
-    const pids = s ? selectedPids(a, s.c).filter((pid) => a.paragraphs.find((p) => p.id === pid).text.trim()) : [];
+    const pids = markTargets(a);
     const marks = pids.map((pid) => a.marks[pid]).filter(Boolean);
     const allMarked = pids.length > 0 && marks.length === pids.length;
     const labels = new Set(marks.map((m) => S.instructionLabel(m)));
@@ -853,6 +881,13 @@
       case 'indent': indentBlocks(1); break;
       case 'outdent': indentBlocks(-1); break;
       case 'clear': clearFormat(); break;
+      case 'image': pickImage((f) => insertImageFiles([f])); break;
+      case 'table': {
+        const blk = inBlockEl(document.activeElement) || (ui.blockSel && blockNode(ui.blockSel));
+        if (blk && blk.dataset.block === 'table') openTableMenu(b, blk.dataset.pid);
+        else openTablePicker(b);
+        break;
+      }
       case 'mark': openInstrMenu(b); break;
       case 'more': openFbMore(b); break;
       default: break;
@@ -1015,10 +1050,18 @@
     ], { alignRight: true });
   }
 
+  /** 标记作用的段落：焦点在图片或表格上时是这一块，否则是选区涉及的非空段落。 */
+  function markTargets(a) {
+    if (!a) return [];
+    const blk = inBlockEl(document.activeElement) || (ui.blockSel && blockNode(ui.blockSel));
+    if (blk) return [blk.dataset.pid];
+    const c = editSel();
+    return c ? selectedPids(a, c).filter((pid) => markable(a.paragraphs.find((p) => p.id === pid))) : [];
+  }
+
   function openInstrMenu(b) {
     const a = current();
-    const c = editSel();
-    const pids = c ? selectedPids(a, c).filter((pid) => a.paragraphs.find((p) => p.id === pid).text.trim()) : [];
+    const pids = markTargets(a);
     if (!pids.length) return;
     const marks = pids.map((pid) => a.marks[pid]);
     const anyMarked = marks.some(Boolean);
@@ -1058,6 +1101,8 @@
     const a = current();
     if (!a) return;
     closePopover(false);
+    ui.blockSel = null;
+    ui.cell = null;
     ui.mode = mode;
     ui.showBar = !inspectorVisible();
     if (mode !== 'write') clearHighlight('prov');
@@ -1149,11 +1194,25 @@
     const a = current();
     const ed = editorEl();
     if (!a || !ed) return;
+    const locked = isLocked(a);
+    if (!locked && ensureTail(a)) save();
     const nums = R.numbering(a.paragraphs);
-    ed.innerHTML = a.paragraphs.map((p) => `${paraOpen(p, nums)}${R.inlineHTML(p.text, p.runs) || '<br>'}</p>`).join('');
+    ed.innerHTML = a.paragraphs.map((p) => (isBlock(p) ? blockEditorHTML(p, locked) : `${paraOpen(p, nums)}${R.inlineHTML(p.text, p.runs) || '<br>'}</p>`)).join('');
+    autosizeCells(ed);
+    if (ui.blockSel && !a.paragraphs.some((p) => p.id === ui.blockSel)) ui.blockSel = null;
     updateDecor();
     if (document.activeElement !== ed) paintGhost();
   }
+
+  /** 正文最后总留一个文字段落，图片或表格之后才有地方放光标。 */
+  function ensureTail(a) {
+    const last = a.paragraphs[a.paragraphs.length - 1];
+    if (last && !isBlock(last)) return false;
+    a.paragraphs.push({ id: S.uid('p'), text: '' });
+    return true;
+  }
+
+  const edChildren = (ed) => $$(':scope > [data-pid]', ed);
 
   function updateDecor() {
     const a = current();
@@ -1161,8 +1220,14 @@
     if (!a || !ed) return;
     const only = a.paragraphs.length === 1;
     const run = ui.running && ui.running.articleId === a.id ? ui.running : null;
-    $$('p', ed).forEach((p) => {
+    edChildren(ed).forEach((p) => {
       const pid = p.dataset.pid;
+      if (p.dataset.block) {
+        p.classList.toggle('is-marked', Boolean(a.marks[pid]));
+        p.classList.toggle('is-revising', Boolean(run && run.current === pid));
+        p.classList.toggle('is-selected', ui.blockSel === pid);
+        return;
+      }
       const empty = !p.textContent;
       p.classList.toggle('is-marked', Boolean(a.marks[pid]));
       p.classList.toggle('is-empty', empty);
@@ -1181,12 +1246,12 @@
     const locked = isLocked(a);
     const run = ui.running && ui.running.articleId === a.id ? ui.running : null;
     const html = [];
-    $$('p', ed).forEach((p) => {
+    edChildren(ed).forEach((p) => {
       const pid = p.dataset.pid;
       const mark = a.marks[pid];
       if (!locked) {
         const show = ui.hoverPid === pid;
-        const lineTop = p.offsetTop + Math.max(0, (parseFloat(getComputedStyle(p).lineHeight) || 30) / 2 - 13);
+        const lineTop = p.dataset.block ? p.offsetTop + 4 : p.offsetTop + Math.max(0, (parseFloat(getComputedStyle(p).lineHeight) || 30) / 2 - 13);
         html.push(`<div class="g-item ${show ? 'show' : ''}" data-pid="${pid}" style="top:${lineTop}px"><button type="button" class="g-btn g-handle" data-drag="${pid}" tabindex="-1" aria-hidden="true" title="拖动以移动段落">${icon('i-grip', 'sm')}</button></div>`);
       }
       if (mark) {
@@ -1202,7 +1267,7 @@
     $$('.g-item').forEach((it) => it.classList.toggle('show', ui.hoverPid === it.dataset.pid));
   }
 
-  const edResize = new ResizeObserver(() => renderGutter());
+  const edResize = new ResizeObserver(() => { renderGutter(); positionImgBar(); });
 
   /* —— 光标与选区（偏移量与 JS 字符串一致，按 UTF-16 计数）—— */
 
@@ -1217,23 +1282,39 @@
     try { r.setEnd(node, off); } catch (_) { return 0; }
     return r.toString().length;
   }
+  /** 选区端点落在段落之间或图片、表格上时，起点取其后的第一个文字段落开头，终点取其前的最后一个文字段落末尾。 */
+  function resolvePoint(ed, node, off, isEnd) {
+    const p = paraOf(node);
+    if (p) return { p, off: offsetIn(p, node, off) };
+    let anchor;
+    if (node === ed) anchor = isEnd ? ed.childNodes[off - 1] : ed.childNodes[off];
+    else anchor = node.nodeType === 1 ? node.closest('#editor > *') : node.parentElement && node.parentElement.closest('#editor > *');
+    const kids = $$(':scope > p[data-pid]', ed);
+    if (!anchor) return isEnd ? (kids.length ? { p: kids[kids.length - 1], off: kids[kids.length - 1].textContent.length } : null) : (kids[0] ? { p: kids[0], off: 0 } : null);
+    if (isEnd) {
+      for (let n = anchor; n; n = n.previousElementSibling) if (n.tagName === 'P' && n.dataset.pid) return { p: n, off: n.textContent.length };
+      return kids[0] ? { p: kids[0], off: 0 } : null;
+    }
+    for (let n = anchor; n; n = n.nextElementSibling) if (n.tagName === 'P' && n.dataset.pid) return { p: n, off: 0 };
+    return kids.length ? { p: kids[kids.length - 1], off: kids[kids.length - 1].textContent.length } : null;
+  }
   function getCaret() {
     const ed = editorEl();
     const sel = window.getSelection();
     if (!ed || !sel || !sel.rangeCount) return null;
+    if (inBlockEl(document.activeElement)) return null;
     const r = sel.getRangeAt(0);
     if (!ed.contains(r.startContainer)) return null;
-    let sp = paraOf(r.startContainer);
-    let ep = paraOf(r.endContainer);
-    if (!sp) sp = ed.querySelector('p');
-    if (!ep) ep = sp;
-    if (!sp) return null;
+    const s = resolvePoint(ed, r.startContainer, r.startOffset, false);
+    let e = r.collapsed ? s : resolvePoint(ed, r.endContainer, r.endOffset, true);
+    if (!s) return null;
+    if (!e || [...ed.children].indexOf(e.p) < [...ed.children].indexOf(s.p)) e = s;
     return {
-      pid: sp.dataset.pid,
-      offset: paraOf(r.startContainer) ? offsetIn(sp, r.startContainer, r.startOffset) : 0,
-      endPid: ep.dataset.pid,
-      endOffset: paraOf(r.endContainer) ? offsetIn(ep, r.endContainer, r.endOffset) : 0,
-      collapsed: r.collapsed,
+      pid: s.p.dataset.pid,
+      offset: s.off,
+      endPid: e.p.dataset.pid,
+      endOffset: e === s && r.collapsed ? s.off : e.off,
+      collapsed: r.collapsed || (e.p === s.p && e.off === s.off),
     };
   }
   function rangeIn(p, start, end) {
@@ -1281,6 +1362,7 @@
     const a = current();
     const act = document.activeElement;
     if (act && (act.tagName === 'INPUT' || act.tagName === 'TEXTAREA') && act.closest('#content')) return null;
+    if (inBlockEl(act)) return null;
     const live = getCaret();
     if (live) return live;
     const s = ui.sel;
@@ -1375,6 +1457,11 @@
         continue;
       }
       if (node.nodeType !== 1) continue;
+      if (node.dataset && node.dataset.block) {
+        const prev = prevById.get(node.dataset.pid);
+        if (prev && isBlock(prev) && !seen.has(prev.id)) { seen.add(prev.id); out.push(prev); } else structural = true;
+        continue;
+      }
       if (node.tagName !== 'P') structural = true;
       const srcId = node.dataset && node.dataset.pid;
       let id = srcId;
@@ -1539,6 +1626,18 @@
     }
     if (idx <= 0) return;
     const prev = a.paragraphs[idx - 1];
+    if (isBlock(prev)) {
+      if (!p.text && a.paragraphs[idx + 1]) {
+        pushUndo('删除', { caret: c });
+        a.paragraphs.splice(idx, 1);
+        delete a.marks[p.id];
+        touch(a);
+        renderEditorParas();
+        afterTextChange();
+      }
+      selectBlock(prev.id);
+      return;
+    }
     pushUndo('合并段落', { caret: c });
     if (!prev.text) {
       a.paragraphs.splice(idx - 1, 1);
@@ -1559,6 +1658,18 @@
     const p = a.paragraphs[idx];
     const next = a.paragraphs[idx + 1];
     if (!next) return;
+    if (isBlock(next)) {
+      if (!p.text) {
+        pushUndo('删除', { caret: c });
+        a.paragraphs.splice(idx, 1);
+        delete a.marks[p.id];
+        touch(a);
+        renderEditorParas();
+        afterTextChange();
+      }
+      selectBlock(next.id);
+      return;
+    }
     pushUndo('合并段落', { caret: c });
     if (!p.text) {
       a.paragraphs.splice(idx, 1);
@@ -1584,6 +1695,7 @@
       const s = i === i1 ? c.offset : 0;
       const e = i === i2 ? c.endOffset : p.text.length;
       if (i === i2 && i > i1 && e === 0) break;
+      if (isBlock(p)) { const b = B.cloneBlock(p); delete b.id; out.push(b); continue; }
       out.push({ text: p.text.slice(s, e), runs: R.slice(R.runsOf(p), s, e), ...R.blockOf(p) });
     }
     return out;
@@ -1604,6 +1716,10 @@
     const base = Object.fromEntries(Object.entries(here).filter(([, v]) => v));
     const runsFor = (b) => (plain || !b.runs || !b.runs.length ? [{ n: b.text.length, ...base }] : b.runs);
     pending = null;
+    if (blocks.some(isBlock)) {
+      insertWithBlocks(a, idx, off, blocks, runsFor, plain);
+      return;
+    }
     if (blocks.length === 1) {
       R.insert(p, off, blocks[0].text, runsFor(blocks[0]));
       lastUndoKind = 'paste';
@@ -1628,6 +1744,727 @@
     rerender(last.id, caretOff);
   }
 
+  /* ───────────────────────── 图片与表格 ─────────────────────────
+   * 图片和表格在正文里是不可编辑的“岛”（contenteditable=false），图注和单元格用 textarea 编辑，
+   * 改动直接写回段落模型，撤销与正文共用一个栈。选中整块时焦点在它的外框上：
+   * 退格或删除键删去整块，回车在其后另起一段，方向键离开。
+   */
+
+  function inBlockEl(t) {
+    return t && t.nodeType === 1 && t.closest ? t.closest('#editor > [data-block]') : null;
+  }
+  function blockNode(pid) {
+    const ed = editorEl();
+    return ed ? ed.querySelector(`:scope > [data-block][data-pid="${CSS.escape(pid)}"]`) : null;
+  }
+  const paraById = (pid) => { const a = current(); return a ? a.paragraphs.find((p) => p.id === pid) || null : null; };
+  const markable = (p) => Boolean(p) && (isBlock(p) || Boolean(p.text.trim()));
+  const W_LABEL = Object.fromEntries(B.WIDTHS.map((w) => [w.id, w.label]));
+  const FIELD_SIZING = typeof CSS !== 'undefined' && CSS.supports && CSS.supports('field-sizing', 'content');
+
+  function imgHTML(p, cls = '') {
+    const src = B.assetURL(p.img.asset);
+    if (!src) return `<span class="img-missing ${cls}">图片不可用</span>`;
+    const size = p.img.iw && p.img.ih ? ` width="${p.img.iw}" height="${p.img.ih}"` : '';
+    return `<img class="${cls}" src="${esc(src)}" alt="${esc(p.img.alt || p.text || '')}"${size} draggable="false">`;
+  }
+  const figStyle = (p) => (p.img.iw ? ` style="--iw:${p.img.iw}px"` : '');
+
+  function blockEditorHTML(p, locked) {
+    const ro = locked ? ' readonly' : '';
+    if (p.kind === 'img') {
+      return `<figure class="blk k-img w-${p.img.w}" data-pid="${p.id}" data-block="img" contenteditable="false"${figStyle(p)}>`
+        + `<div class="fig-media" tabindex="-1" role="img" aria-label="${esc(`图片${p.img.alt ? `：${p.img.alt}` : ''}`)}">${imgHTML(p)}</div>`
+        + `<textarea class="fig-cap" rows="1" placeholder="图注" aria-label="图注" spellcheck="true"${ro}>${esc(p.text)}</textarea></figure>`;
+    }
+    const t = p.table;
+    const rows = t.rows.map((r, ri) => `<tr data-row="${r.id}">${t.cols.map((c, ci) => `<td data-col="${c}"><textarea class="cell" rows="1" aria-label="第 ${ri + 1} 行第 ${ci + 1} 列" spellcheck="true"${ro}>${esc(B.cellText(t, r, c))}</textarea></td>`).join('')}</tr>`).join('');
+    return `<div class="blk k-table" data-pid="${p.id}" data-block="table" contenteditable="false">`
+      + `<div class="tbl-frame" tabindex="-1" role="group" aria-label="表格，${t.rows.length} 行 ${t.cols.length} 列">`
+      + `<div class="tbl-scroll"><table class="tbl${t.head ? ' has-head' : ''}" style="--cols:${t.cols.length}"><tbody>${rows}</tbody></table></div></div>`
+      + `${locked ? '' : `<button type="button" class="tbl-more" data-tbl-menu="${p.id}" tabindex="-1" aria-label="表格操作" title="表格操作">${icon('i-more', 'sm')}</button>`}</div>`;
+  }
+
+  function autosize(t) {
+    if (FIELD_SIZING || !t) return;
+    t.style.height = 'auto';
+    t.style.height = `${t.scrollHeight}px`;
+  }
+  function autosizeCells(root) {
+    if (FIELD_SIZING) return;
+    $$('textarea.cell, textarea.fig-cap', root).forEach(autosize);
+  }
+
+  function cellPos(ta) {
+    const blk = inBlockEl(ta);
+    const tr = ta.closest('tr');
+    const td = ta.closest('td');
+    return blk && tr && td ? { pid: blk.dataset.pid, row: tr.dataset.row, col: td.dataset.col } : null;
+  }
+  function cellArea(pid, row, col) {
+    const node = blockNode(pid);
+    return node ? node.querySelector(`tr[data-row="${CSS.escape(row)}"] td[data-col="${CSS.escape(col)}"] textarea`) : null;
+  }
+  function focusCell(pid, row, col, offset = 0) {
+    const ta = cellArea(pid, row, col);
+    if (!ta) return false;
+    ta.focus({ preventScroll: true });
+    const n = offset === 'end' ? ta.value.length : Math.min(offset || 0, ta.value.length);
+    ta.setSelectionRange(n, n);
+    scrollNodeIntoView(ta.closest('td'));
+    return true;
+  }
+  function scrollNodeIntoView(node) {
+    if (!node) return;
+    const sc = node.closest('.tbl-scroll');
+    if (sc) {
+      const r = node.getBoundingClientRect();
+      const box = sc.getBoundingClientRect();
+      if (r.left < box.left) sc.scrollLeft -= box.left - r.left + 8;
+      else if (r.right > box.right) sc.scrollLeft += r.right - box.right + 8;
+    }
+    scrollRangeIntoView({ getBoundingClientRect: () => node.getBoundingClientRect() }, node);
+  }
+
+  /** 当前焦点所在的块内位置，用于撤销后把光标放回原处。 */
+  function anyCaret() {
+    const act = document.activeElement;
+    const blk = inBlockEl(act);
+    if (blk) {
+      const pid = blk.dataset.pid;
+      if (act.classList.contains('cell')) { const c = cellPos(act); return { pid, block: true, cell: `${c.row}.${c.col}`, offset: act.selectionStart }; }
+      if (act.classList.contains('fig-cap')) return { pid, block: true, cap: true, offset: act.selectionStart };
+      return { pid, block: true };
+    }
+    const bar = $('#img-bar');
+    if (ui.blockSel && bar && bar.contains(act)) return { pid: ui.blockSel, block: true };
+    return getCaret();
+  }
+  function restoreBlockCaret(c) {
+    const node = blockNode(c.pid);
+    if (!node) { focusEditorEnd(); return; }
+    if (c.cell) {
+      const [row, col] = c.cell.split('.');
+      if (focusCell(c.pid, row, col, c.offset)) return;
+    }
+    if (c.cap) {
+      const t = $('.fig-cap', node);
+      ui.blockSel = c.pid;
+      updateDecor();
+      t.focus({ preventScroll: true });
+      t.setSelectionRange(c.offset || 0, c.offset || 0);
+      positionImgBar();
+      return;
+    }
+    selectBlock(c.pid);
+  }
+
+  function selectBlock(pid, opts = {}) {
+    const node = blockNode(pid);
+    if (!node) return;
+    ui.blockSel = pid;
+    ui.caret = { pid, offset: 0 };
+    const s = window.getSelection();
+    if (s) s.removeAllRanges();
+    updateDecor();
+    const target = node.dataset.block === 'img' ? $('.fig-media', node) : $('.tbl-frame', node);
+    target.focus({ preventScroll: true });
+    if (opts.scroll !== false) scrollNodeIntoView(node);
+    positionImgBar();
+    queueSyncFormatBar();
+    if (opts.announce !== false) announce(node.dataset.block === 'img' ? '已选中图片' : '已选中表格');
+  }
+  function clearBlockSel() {
+    if (!ui.blockSel) return;
+    ui.blockSel = null;
+    $$('#editor > [data-block].is-selected').forEach((n) => n.classList.remove('is-selected'));
+    positionImgBar();
+  }
+
+  /** 从相邻段落进入图片或表格：图片整块选中，表格进入第一格或最后一格。 */
+  function enterBlock(pid, where) {
+    const p = paraById(pid);
+    if (!p) return;
+    if (p.kind === 'img' || isLocked(current())) { selectBlock(pid); return; }
+    const t = p.table;
+    if (where === 'end') focusCell(pid, t.rows[t.rows.length - 1].id, t.cols[t.cols.length - 1], 'end');
+    else focusCell(pid, t.rows[0].id, t.cols[0], 0);
+  }
+
+  function leaveBlock(pid, dir) {
+    const a = current();
+    const i = a.paragraphs.findIndex((p) => p.id === pid);
+    const q = a.paragraphs[i + dir];
+    clearBlockSel();
+    if (!q) {
+      if (dir < 0) { const t = $('#title-input'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); }
+      else newParaAfter(pid);
+      return;
+    }
+    if (isBlock(q)) { enterBlock(q.id, dir > 0 ? 'start' : 'end'); return; }
+    setCaret(q.id, dir > 0 ? 0 : q.text.length);
+  }
+
+  function newParaAfter(pid) {
+    const a = current();
+    if (!a || isLocked(a)) return;
+    const i = a.paragraphs.findIndex((p) => p.id === pid);
+    if (i < 0) return;
+    pushUndo('分段', { caret: { pid, block: true } });
+    const np = { id: S.uid('p'), text: '' };
+    a.paragraphs.splice(i + 1, 0, np);
+    ui.blockSel = null;
+    rerender(np.id, 0);
+  }
+
+  function deleteBlock(pid) {
+    const a = current();
+    if (!a || isLocked(a)) return;
+    const i = a.paragraphs.findIndex((p) => p.id === pid);
+    const p = a.paragraphs[i];
+    if (!isBlock(p)) return;
+    const label = p.kind === 'img' ? '删除图片' : '删除表格';
+    pushUndo(label, { caret: { pid, block: true } });
+    a.paragraphs.splice(i, 1);
+    delete a.marks[pid];
+    ui.blockSel = null;
+    ensureTail(a);
+    touch(a);
+    renderEditorParas();
+    positionImgBar();
+    toast(`已${label}`, { action: { label: '撤销', run: undo } });
+    const prev = a.paragraphs[i - 1];
+    const next = a.paragraphs[i];
+    if (prev && !isBlock(prev)) setCaret(prev.id, prev.text.length);
+    else if (next && !isBlock(next)) setCaret(next.id, 0);
+    else if (prev) selectBlock(prev.id, { announce: false });
+    afterTextChange();
+    renderToolbar();
+  }
+
+  /**
+   * 在光标处插入一个图片或表格段落：空段落放在它前面（空段落留在下面接着写），
+   * 段首插在前面，段尾插在后面，段中把这一段拆成两段；焦点在图片或表格上时插在它后面。
+   */
+  function insertBlockHere(block, label) {
+    const a = current();
+    if (!a || isLocked(a) || ui.view !== 'article' || ui.mode !== 'write') return null;
+    const blk = inBlockEl(document.activeElement) || (ui.blockSel && blockNode(ui.blockSel));
+    let c = blk ? null : (getCaret() || editSel());
+    pushUndo(label, { caret: blk ? { pid: blk.dataset.pid, block: true } : c });
+    let at;
+    if (blk) at = a.paragraphs.findIndex((p) => p.id === blk.dataset.pid) + 1;
+    else if (!c) {
+      const last = a.paragraphs[a.paragraphs.length - 1];
+      at = last && !isBlock(last) && !last.text ? a.paragraphs.length - 1 : a.paragraphs.length;
+    } else {
+      if (!c.collapsed) c = deleteSelectionModel(c);
+      const i = a.paragraphs.findIndex((p) => p.id === c.pid);
+      const p = a.paragraphs[i];
+      if (!p.text || c.offset === 0) at = i;
+      else if (c.offset >= p.text.length) at = i + 1;
+      else {
+        const right = R.cut(p, c.offset);
+        const np = { id: S.uid('p'), text: right.text, ...R.blockOf(p) };
+        R.setRuns(np, right.runs);
+        a.paragraphs.splice(i + 1, 0, np);
+        at = i + 1;
+      }
+    }
+    a.paragraphs.splice(at, 0, block);
+    pending = null;
+    ensureTail(a);
+    touch(a);
+    renderEditorParas();
+    afterTextChange();
+    return block;
+  }
+
+  /* —— 本地图片：选择、粘贴或拖入；只在本机读取和保存 —— */
+
+  let filePick = null;
+  function pickImage(onFile) {
+    let input = $('#img-file');
+    if (!input) {
+      input = document.createElement('input');
+      input.type = 'file';
+      input.id = 'img-file';
+      input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/avif,image/bmp,image/svg+xml';
+      input.hidden = true;
+      input.addEventListener('change', () => {
+        const f = input.files && input.files[0];
+        const run = filePick;
+        filePick = null;
+        input.value = '';
+        if (f && run) run(f);
+      });
+      document.body.appendChild(input);
+    }
+    filePick = onFile;
+    input.click();
+  }
+
+  async function loadImage(file, verb) {
+    let r;
+    try {
+      r = await B.readImage(file);
+    } catch (err) {
+      toast(err instanceof B.ImageError ? err.message : '无法读取这张图片');
+      return null;
+    }
+    try {
+      return { asset: B.saveAsset(r.url), iw: r.iw, ih: r.ih };
+    } catch (err) {
+      toast(isQuota(err) ? `存储空间不足，图片没有${verb}` : `无法保存图片，图片没有${verb}`);
+      return null;
+    }
+  }
+
+  const defaultWidth = (iw) => (iw < 360 ? 's' : iw < 720 ? 'm' : 'l');
+
+  async function insertImageFiles(files) {
+    for (const file of files) {
+      const r = await loadImage(file, '插入');
+      if (!r) return;
+      const block = { id: S.uid('p'), kind: 'img', text: '', img: { asset: r.asset, w: defaultWidth(r.iw), alt: '', iw: r.iw, ih: r.ih } };
+      if (!insertBlockHere(block, '插入图片')) return;
+      selectBlock(block.id, { announce: false });
+      announce('已插入图片');
+    }
+  }
+
+  function replaceImage(pid) {
+    pickImage(async (file) => {
+      const r = await loadImage(file, '替换');
+      const p = paraById(pid);
+      if (!r || !p || isLocked(current())) return;
+      pushUndo('替换图片', { caret: { pid, block: true } });
+      p.img = { ...p.img, asset: r.asset, iw: r.iw, ih: r.ih, alt: '' };
+      touch(current());
+      renderEditorParas();
+      selectBlock(pid, { announce: false });
+      afterTextChange();
+      announce('已替换图片');
+    });
+  }
+
+  function setImgWidth(pid, w) {
+    const p = paraById(pid);
+    if (!p || p.kind !== 'img' || p.img.w === w || isLocked(current())) return;
+    pushUndo('图片大小', { caret: { pid, block: true } });
+    p.img.w = w;
+    touch(current());
+    renderEditorParas();
+    selectBlock(pid, { scroll: false, announce: false });
+    renderGutter();
+    announce(`图片大小：${W_LABEL[w]}`);
+  }
+
+  function editAlt(pid) {
+    const p = paraById(pid);
+    if (!p || p.kind !== 'img') return;
+    openDialog({
+      title: '替代文字',
+      body: `<div class="field"><input type="text" value="${esc(p.img.alt)}" placeholder="描述这张图片" aria-label="替代文字" maxlength="200"></div>`,
+      actions: [{ label: '取消', value: null }, { label: '确定', value: 'ok', primary: true }],
+      onClose: (v, text) => {
+        const t = (text || '').trim();
+        if (v === 'ok' && t !== p.img.alt) {
+          pushUndo('替代文字', { caret: { pid, block: true } });
+          p.img.alt = t;
+          touch(current());
+          renderEditorParas();
+        }
+        setTimeout(() => selectBlock(pid, { scroll: false, announce: false }), 0);
+      },
+    });
+  }
+
+  /* —— 图片工具条：显示大小、替换、替代文字、删除 —— */
+
+  function positionImgBar() {
+    const old = $('#img-bar');
+    const a = current();
+    const node = ui.blockSel && blockNode(ui.blockSel);
+    const p = node && paraById(ui.blockSel);
+    if (!node || !p || p.kind !== 'img' || !a || isLocked(a) || ui.mode !== 'write' || ui.view !== 'article') { if (old) old.remove(); return; }
+    const page = node.closest('.page');
+    let bar = old;
+    if (!bar || bar.parentElement !== page) {
+      if (bar) bar.remove();
+      bar = document.createElement('div');
+      bar.id = 'img-bar';
+      bar.className = 'img-bar';
+      bar.setAttribute('role', 'toolbar');
+      bar.setAttribute('aria-label', '图片');
+      page.appendChild(bar);
+    }
+    const html = `<div class="segmented small" role="group" aria-label="显示大小">${B.WIDTHS.map((w) => `<button type="button" data-img-w="${w.id}" aria-pressed="${p.img.w === w.id}">${w.label}</button>`).join('')}</div>`
+      + '<span class="ib-sep" aria-hidden="true"></span>'
+      + '<button type="button" class="ib-btn" data-img-act="replace">替换</button>'
+      + '<button type="button" class="ib-btn" data-img-act="alt">替代文字</button>'
+      + `<button type="button" class="ib-btn ib-icon" data-img-act="delete" aria-label="删除图片" title="删除图片">${icon('i-trash', 'sm')}</button>`;
+    if (bar.dataset.pid !== p.id || bar.dataset.html !== html) { bar.innerHTML = html; bar.dataset.pid = p.id; bar.dataset.html = html; }
+    const media = $('.fig-media', node);
+    const r = media.getBoundingClientRect();
+    const pr = page.getBoundingClientRect();
+    bar.style.top = `${r.top - pr.top + 10}px`;
+    bar.style.left = `${Math.max(8, Math.min(r.left - pr.left + r.width / 2 - bar.offsetWidth / 2, pr.width - bar.offsetWidth - 8))}px`;
+  }
+
+  el.content.addEventListener('mousedown', (e) => {
+    if (e.target.closest('#img-bar button')) e.preventDefault();
+  });
+  el.content.addEventListener('click', (e) => {
+    const bar = e.target.closest('#img-bar');
+    if (bar) {
+      const pid = bar.dataset.pid;
+      const w = e.target.closest('[data-img-w]');
+      const act = e.target.closest('[data-img-act]');
+      if (w) setImgWidth(pid, w.dataset.imgW);
+      else if (act && act.dataset.imgAct === 'replace') replaceImage(pid);
+      else if (act && act.dataset.imgAct === 'alt') editAlt(pid);
+      else if (act && act.dataset.imgAct === 'delete') deleteBlock(pid);
+      return;
+    }
+    const more = e.target.closest('[data-tbl-menu]');
+    if (more) { openTableMenu(more, more.dataset.tblMenu); return; }
+    if (ui.mode !== 'write' || ui.view !== 'article') return;
+    const media = e.target.closest('#editor .fig-media');
+    if (media) { selectBlock(inBlockEl(media).dataset.pid, { scroll: false }); return; }
+    const frame = e.target.closest('#editor .k-table');
+    if (frame && !e.target.closest('textarea') && !e.target.closest('button')) selectBlock(frame.dataset.pid, { scroll: false });
+  });
+  el.content.addEventListener('keydown', (e) => {
+    const bar = e.target.closest && e.target.closest('#img-bar');
+    if (!bar) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); selectBlock(bar.dataset.pid, { scroll: false, announce: false }); return; }
+    if (e.key === 'Tab') {
+      const items = $$('button', bar);
+      const i = items.indexOf(e.target);
+      const node = blockNode(bar.dataset.pid);
+      if (e.shiftKey && i === 0) { e.preventDefault(); selectBlock(bar.dataset.pid, { scroll: false, announce: false }); }
+      else if (!e.shiftKey && i === items.length - 1 && node) { e.preventDefault(); $('.fig-cap', node).focus(); }
+    }
+  });
+
+  /* —— 表格：插入时选行列，单元格里用 Tab 和方向键移动 —— */
+
+  function openTablePicker(anchor) {
+    const COLS = 8;
+    const ROWS = 8;
+    let sel = { r: 3, c: 3 };
+    const cells = [];
+    for (let r = 1; r <= ROWS; r++) for (let c = 1; c <= COLS; c++) cells.push(`<button type="button" class="tp-cell" data-r="${r}" data-c="${c}" tabindex="-1" aria-label="${r} 行 ${c} 列"></button>`);
+    const node = openPopover(anchor, `<div class="table-picker" role="grid" aria-label="插入表格"><div class="tp-grid" style="--n:${COLS}">${cells.join('')}</div><div class="tp-label" aria-live="polite"></div></div>`, { label: '插入表格', focus: `.tp-cell[data-r="3"][data-c="3"]` });
+    const paint = () => {
+      $$('.tp-cell', node).forEach((b) => {
+        const on = Number(b.dataset.r) <= sel.r && Number(b.dataset.c) <= sel.c;
+        b.classList.toggle('on', on);
+        b.tabIndex = Number(b.dataset.r) === sel.r && Number(b.dataset.c) === sel.c ? 0 : -1;
+      });
+      $('.tp-label', node).textContent = `${sel.r} × ${sel.c}`;
+    };
+    const pick = () => {
+      closePopover(false);
+      insertTable(sel.r, sel.c);
+    };
+    paint();
+    node.addEventListener('pointerover', (e) => {
+      const b = e.target.closest('.tp-cell');
+      if (b) { sel = { r: Number(b.dataset.r), c: Number(b.dataset.c) }; paint(); }
+    });
+    node.addEventListener('click', (e) => { if (e.target.closest('.tp-cell')) pick(); });
+    node.addEventListener('keydown', (e) => {
+      const d = { ArrowRight: [0, 1], ArrowLeft: [0, -1], ArrowDown: [1, 0], ArrowUp: [-1, 0] }[e.key];
+      if (d) {
+        e.preventDefault();
+        sel = { r: Math.max(1, Math.min(ROWS, sel.r + d[0])), c: Math.max(1, Math.min(COLS, sel.c + d[1])) };
+        paint();
+        $(`.tp-cell[data-r="${sel.r}"][data-c="${sel.c}"]`, node).focus();
+      } else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); }
+    });
+  }
+
+  function insertTable(rows, cols) {
+    const block = { id: S.uid('p'), kind: 'table', text: '', table: B.makeTable(rows, cols) };
+    B.syncText(block);
+    if (!insertBlockHere(block, '插入表格')) return;
+    focusCell(block.id, block.table.rows[0].id, block.table.cols[0], 0);
+    announce(`已插入 ${rows} 行 ${cols} 列的表格`);
+  }
+
+  function tableOp(pid, label, fn) {
+    const a = current();
+    const p = paraById(pid);
+    if (!a || !p || p.kind !== 'table' || isLocked(a)) return;
+    const before = JSON.stringify(p.table);
+    const trial = B.cloneBlock(p);
+    if (fn(trial) === false || JSON.stringify(trial.table) === before) return;
+    pushUndo(label, { caret: anyCaret() || { pid, block: true } });
+    const target = fn(p);
+    touch(a);
+    renderEditorParas();
+    if (target && target.row) focusCell(pid, target.row, target.col, 0);
+    else selectBlock(pid, { announce: false });
+    afterTextChange();
+    announce(label);
+  }
+
+  function openTableMenu(anchor, pid) {
+    const p = paraById(pid);
+    if (!p || p.kind !== 'table' || isLocked(current())) return;
+    const t = p.table;
+    const here = ui.cell && ui.cell.pid === pid && t.rows.some((r) => r.id === ui.cell.row) && t.cols.includes(ui.cell.col)
+      ? ui.cell : { row: t.rows[t.rows.length - 1].id, col: t.cols[t.cols.length - 1] };
+    const ri = t.rows.findIndex((r) => r.id === here.row);
+    const ci = t.cols.indexOf(here.col);
+    const fullR = t.rows.length >= B.MAX_ROWS;
+    const fullC = t.cols.length >= B.MAX_COLS;
+    openMenu(anchor, [
+      { label: '在上方插入行', disabled: fullR, run: () => tableOp(pid, '插入行', (q) => { const id = B.insertRow(q, ri); return id ? { row: id, col: here.col } : false; }) },
+      { label: '在下方插入行', disabled: fullR, run: () => tableOp(pid, '插入行', (q) => { const id = B.insertRow(q, ri + 1); return id ? { row: id, col: here.col } : false; }) },
+      { label: '在左侧插入列', disabled: fullC, run: () => tableOp(pid, '插入列', (q) => { const id = B.insertCol(q, ci); return id ? { row: here.row, col: id } : false; }) },
+      { label: '在右侧插入列', disabled: fullC, run: () => tableOp(pid, '插入列', (q) => { const id = B.insertCol(q, ci + 1); return id ? { row: here.row, col: id } : false; }) },
+      '-',
+      { label: '删除这一行', disabled: t.rows.length <= 1, run: () => tableOp(pid, '删除行', (q) => { if (!B.removeRow(q, here.row)) return false; const r = q.table.rows[Math.min(ri, q.table.rows.length - 1)]; return { row: r.id, col: here.col }; }) },
+      { label: '删除这一列', disabled: t.cols.length <= 1, run: () => tableOp(pid, '删除列', (q) => { if (!B.removeCol(q, here.col)) return false; return { row: here.row, col: q.table.cols[Math.min(ci, q.table.cols.length - 1)] }; }) },
+      '-',
+      { label: '标题行', checked: Boolean(t.head), run: () => tableOp(pid, '标题行', (q) => { q.table.head = !q.table.head; return here; }) },
+      '-',
+      { label: '删除表格', icon: 'i-trash', danger: true, run: () => deleteBlock(pid) },
+    ], { alignRight: true });
+  }
+
+  function moveCell(pos, dr, dc, offset) {
+    const p = paraById(pos.pid);
+    const t = p.table;
+    const ri = t.rows.findIndex((r) => r.id === pos.row);
+    const ci = t.cols.indexOf(pos.col);
+    let r = ri + dr;
+    let c = ci + dc;
+    if (dc && (c < 0 || c >= t.cols.length) && !dr) {
+      r += c < 0 ? -1 : 1;
+      c = c < 0 ? t.cols.length - 1 : 0;
+    }
+    if (r < 0) { leaveBlock(pos.pid, -1); return; }
+    if (r >= t.rows.length) { leaveBlock(pos.pid, 1); return; }
+    focusCell(pos.pid, t.rows[r].id, t.cols[c], offset);
+  }
+
+  let cellUndoAt = 0;
+  function onBlockInput(ta) {
+    const blk = inBlockEl(ta);
+    const a = current();
+    const p = blk && paraById(blk.dataset.pid);
+    if (!p || isLocked(a)) return;
+    const now = Date.now();
+    let kind;
+    if (ta.classList.contains('cell')) {
+      const pos = cellPos(ta);
+      kind = `cell:${pos.pid}:${pos.row}.${pos.col}`;
+      if (lastUndoKind !== kind || now - cellUndoAt > 1500) pushUndo('输入', { kind, caret: { pid: p.id, block: true, cell: `${pos.row}.${pos.col}`, offset: ta.selectionStart } });
+      B.setCell(p, pos.row, pos.col, ta.value);
+    } else {
+      kind = `cap:${p.id}`;
+      const v = ta.value.replace(/\n/g, ' ');
+      if (v !== ta.value) ta.value = v;
+      if (lastUndoKind !== kind || now - cellUndoAt > 1500) pushUndo('输入', { kind, caret: { pid: p.id, block: true, cap: true, offset: ta.selectionStart } });
+      p.text = v;
+    }
+    cellUndoAt = now;
+    touch(a);
+    autosize(ta);
+    if (ui.mode === 'write') renderGutter();
+    afterTextChange();
+  }
+
+  const onFirstLine = (ta) => !ta.value.slice(0, ta.selectionStart).includes('\n');
+  const onLastLine = (ta) => !ta.value.slice(ta.selectionEnd).includes('\n');
+
+  function onBlockKey(e, blk) {
+    const pid = blk.dataset.pid;
+    const t = e.target;
+    const mod = isMac ? e.metaKey : e.ctrlKey;
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const plain = !mod && !e.altKey && !e.shiftKey;
+    const locked = isLocked(current());
+    if (mod && !e.altKey && (key === 'z' || (key === 'y' && !isMac))) {
+      e.preventDefault();
+      if (key === 'y' || e.shiftKey) redo(); else undo();
+      return;
+    }
+    if (e.altKey && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !locked) {
+      e.preventDefault();
+      const a = current();
+      const i = a.paragraphs.findIndex((p) => p.id === pid);
+      const keep = anyCaret();
+      moveParagraph(pid, i + (e.key === 'ArrowUp' ? -1 : 1));
+      if (keep) restoreBlockCaret(keep);
+      return;
+    }
+    if (t.classList.contains('cell')) {
+      const pos = cellPos(t);
+      const collapsed = t.selectionStart === t.selectionEnd;
+      if (e.key === 'Tab' && !mod && !e.altKey) {
+        e.preventDefault();
+        const p = paraById(pid);
+        const last = pos.row === p.table.rows[p.table.rows.length - 1].id && pos.col === p.table.cols[p.table.cols.length - 1];
+        const first = pos.row === p.table.rows[0].id && pos.col === p.table.cols[0];
+        if (!e.shiftKey && last && !locked) tableOp(pid, '插入行', (q) => { const id = B.insertRow(q, q.table.rows.length); return id ? { row: id, col: q.table.cols[0] } : false; });
+        else if (e.shiftKey && first) leaveBlock(pid, -1);
+        else if (!e.shiftKey && last) leaveBlock(pid, 1);
+        else moveCell(pos, 0, e.shiftKey ? -1 : 1, 0);
+        return;
+      }
+      if (!plain) return;
+      if (e.key === 'ArrowUp' && collapsed && onFirstLine(t)) { e.preventDefault(); moveCell(pos, -1, 0, 'end'); return; }
+      if (e.key === 'ArrowDown' && collapsed && onLastLine(t)) { e.preventDefault(); moveCell(pos, 1, 0, 0); return; }
+      if (e.key === 'ArrowLeft' && collapsed && t.selectionStart === 0) { e.preventDefault(); moveCell(pos, 0, -1, 'end'); return; }
+      if (e.key === 'ArrowRight' && collapsed && t.selectionEnd === t.value.length) { e.preventDefault(); moveCell(pos, 0, 1, 0); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); selectBlock(pid, { scroll: false }); }
+      return;
+    }
+    if (t.classList.contains('fig-cap')) {
+      if (!plain && !(e.key === 'Enter' && e.shiftKey)) return;
+      const collapsed = t.selectionStart === t.selectionEnd;
+      if (e.key === 'Enter') { e.preventDefault(); leaveBlock(pid, 1); return; }
+      if ((e.key === 'ArrowUp' || e.key === 'ArrowLeft') && collapsed && t.selectionStart === 0) { e.preventDefault(); selectBlock(pid, { scroll: false, announce: false }); return; }
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowRight') && collapsed && t.selectionEnd === t.value.length) { e.preventDefault(); leaveBlock(pid, 1); return; }
+      if (e.key === 'Backspace' && !t.value) { e.preventDefault(); selectBlock(pid, { scroll: false, announce: false }); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); selectBlock(pid, { scroll: false, announce: false }); }
+      return;
+    }
+    if (!plain && !(e.key === 'Tab' && e.shiftKey)) return;
+    if ((e.key === 'Backspace' || e.key === 'Delete') && !locked) { e.preventDefault(); deleteBlock(pid); return; }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (blk.dataset.block === 'table' && !locked) enterBlock(pid, 'start');
+      else if (!locked) newParaAfter(pid);
+      return;
+    }
+    if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); leaveBlock(pid, -1); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); leaveBlock(pid, 1); return; }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); leaveBlock(pid, 1); return; }
+    if (e.key === 'Tab' && !e.shiftKey && blk.dataset.block === 'img' && $('#img-bar')) { e.preventDefault(); $('#img-bar button').focus(); }
+  }
+
+  /* 焦点进出图片和表格：记下所在的块和单元格，供标记、插入、溯源使用。 */
+  document.addEventListener('focusin', (e) => {
+    const blk = inBlockEl(e.target);
+    if (blk) {
+      const pid = blk.dataset.pid;
+      const pos = e.target.classList.contains('cell') ? cellPos(e.target) : null;
+      ui.cell = pos;
+      ui.caret = { pid, offset: e.target.selectionStart || 0, ...(pos ? { cell: `${pos.row}.${pos.col}` } : {}) };
+      if (ui.blockSel !== pid) {
+        ui.blockSel = pid;
+        updateDecor();
+      }
+      positionImgBar();
+      clearHighlight('ghost');
+      queueSyncFormatBar();
+      refreshProv();
+      return;
+    }
+    const t = e.target;
+    if (t.closest && (t.closest('#img-bar') || t.closest('#formatbar') || el.layer.contains(t))) return;
+    if (ui.blockSel || ui.cell) {
+      ui.cell = null;
+      clearBlockSel();
+      updateDecor();
+      queueSyncFormatBar();
+    }
+  });
+  el.content.addEventListener('select', (e) => { if (inBlockEl(e.target)) { ui.caret = { ...(ui.caret || {}), offset: e.target.selectionStart }; refreshProv(); } }, true);
+  el.content.addEventListener('keyup', (e) => {
+    if (!inBlockEl(e.target) || e.target.tagName !== 'TEXTAREA') return;
+    ui.caret = { ...(ui.caret || {}), pid: inBlockEl(e.target).dataset.pid, offset: e.target.selectionStart };
+    refreshProv();
+  });
+
+  let provTimer = 0;
+  function refreshProv() {
+    clearTimeout(provTimer);
+    provTimer = setTimeout(() => {
+      const prev = ui.provSel;
+      computeProvSel();
+      const changed = !prev || !ui.provSel || prev.pid !== ui.provSel.pid || prev.cell !== ui.provSel.cell || prev.text !== ui.provSel.text;
+      if (inspectorVisible() && ui.inspectorTab === 'prov' && changed) renderInspector();
+    }, 120);
+  }
+
+  /** 粘贴内容里有图片或表格时，按段落插入：第一段文字并进光标所在段，光标后的文字另起一段。 */
+  function insertWithBlocks(a, idx, off, blocks, runsFor, plain) {
+    const p = a.paragraphs[idx];
+    const right = R.cut(p, off);
+    const out = [];
+    for (const b of blocks) {
+      if (isBlock(b)) {
+        const q = B.freshCopy(b);
+        if (q.kind === 'img' && !q.img.asset && b.pendingSrc) {
+          try { q.img.asset = B.saveAsset(b.pendingSrc); } catch (err) { toast(isQuota(err) ? '存储空间不足，图片没有粘贴' : '无法粘贴图片'); continue; }
+        }
+        out.push(q);
+      } else {
+        const np = { id: S.uid('p'), text: b.text, ...(plain ? {} : R.blockOf(b)) };
+        out.push(R.setRuns(np, runsFor(b)));
+      }
+    }
+    if (out[0] && !isBlock(out[0])) {
+      const f = out.shift();
+      R.append(p, f.text, R.runsOf(f));
+    }
+    let caretPid;
+    let caretOff = 0;
+    const last = out[out.length - 1];
+    if (!last || isBlock(last) || right.text) {
+      const tail = { id: S.uid('p'), text: right.text, ...R.blockOf(p) };
+      R.setRuns(tail, right.runs);
+      out.push(tail);
+      caretPid = tail.id;
+    } else {
+      caretPid = last.id;
+      caretOff = last.text.length;
+      R.append(last, right.text, right.runs);
+    }
+    a.paragraphs.splice(idx + 1, 0, ...out);
+    if (!p.text && isBlock(out[0])) { a.paragraphs.splice(idx, 1); delete a.marks[p.id]; }
+    lastUndoKind = 'paste';
+    rerender(caretPid, caretOff);
+  }
+
+  /* 拖入图片文件：放在落点处；页面其他地方拖入文件时不让浏览器打开它。 */
+  const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('drop', (e) => { if (hasFiles(e)) e.preventDefault(); });
+  el.content.addEventListener('dragover', (e) => {
+    const ed = editorEl();
+    if (!hasFiles(e) || !ed || !ed.isContentEditable || !ed.contains(e.target)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+  el.content.addEventListener('drop', (e) => {
+    const ed = editorEl();
+    if (!hasFiles(e) || !ed || !ed.isContentEditable || !ed.contains(e.target)) return;
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files || []);
+    if (!files.length) return;
+    const blk = inBlockEl(e.target);
+    if (blk) selectBlock(blk.dataset.pid, { scroll: false, announce: false });
+    else if (document.caretRangeFromPoint) {
+      const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+      if (r && paraOf(r.startContainer)) {
+        clearBlockSel();
+        ed.focus({ preventScroll: true });
+        const s = window.getSelection();
+        s.removeAllRanges();
+        s.addRange(r);
+      }
+    }
+    insertImageFiles(files);
+  });
+
   /* —— 排版命令：字符样式作用于选区，光标处则记为待用样式；段落样式作用于选区涉及的所有段落 —— */
 
   function editTarget() {
@@ -1644,6 +2481,7 @@
     if (i1 < 0 || i2 < i1) return out;
     for (let i = i1; i <= i2; i++) {
       const p = a.paragraphs[i];
+      if (isBlock(p)) continue;
       const s = i === i1 ? c.offset : 0;
       const e = i === i2 ? c.endOffset : p.text.length;
       if (e > s) out.push({ p, s, e });
@@ -1728,7 +2566,7 @@
     const t = editTarget();
     if (!t) return;
     const { a, c } = t;
-    const paras = selectedPids(a, c).map((id) => a.paragraphs.find((p) => p.id === id));
+    const paras = selectedPids(a, c).map((id) => a.paragraphs.find((p) => p.id === id)).filter((p) => !isBlock(p));
     const differs = paras.some((p) => JSON.stringify(R.blockOf(R.setBlock(R.clonePara(p), changeFor(p)))) !== JSON.stringify(R.blockOf(p)));
     if (!differs) return;
     pushUndo(label, { caret: c });
@@ -1831,7 +2669,7 @@
     const marked = Boolean(a.marks[pid]);
     const want = force !== undefined ? force : !marked;
     if (want === marked) return;
-    if (want && !p.text.trim()) { toast('空段落不需要改稿'); return; }
+    if (want && !markable(p)) { toast('空段落不需要改稿'); return; }
     const c = editSel();
     pushUndo(want ? '标记段落' : '取消标记', { caret: c });
     if (want) a.marks[pid] = { instruction: 'concise' };
@@ -1862,7 +2700,7 @@
     if (!a || isLocked(a)) return;
     const targets = pids.filter((pid) => {
       const p = a.paragraphs.find((x) => x.id === pid);
-      return p && (instruction ? p.text.trim() : a.marks[pid]);
+      return p && (instruction ? markable(p) : a.marks[pid]);
     });
     if (!targets.length) { if (instruction) toast('空段落不需要改稿'); return; }
     const relabel = instruction && targets.every((pid) => a.marks[pid]);
@@ -1883,9 +2721,8 @@
 
   function markSelection() {
     const a = current();
-    const c = editSel();
-    if (!a || !c || isLocked(a)) return;
-    const pids = selectedPids(a, c).filter((pid) => a.paragraphs.find((p) => p.id === pid).text.trim());
+    if (!a || isLocked(a)) return;
+    const pids = markTargets(a);
     if (!pids.length) { toast('空段落不需要改稿'); return; }
     if (pids.every((pid) => a.marks[pid])) applyMarks(pids, null);
     else applyMarks(pids.filter((pid) => !a.marks[pid]), 'concise');
@@ -1931,6 +2768,11 @@
   el.content.addEventListener('beforeinput', (e) => {
     const ed = editorEl();
     if (!ed || !ed.contains(e.target)) return;
+    if (inBlockEl(e.target)) {
+      if (e.inputType === 'historyUndo') { e.preventDefault(); undo(); }
+      else if (e.inputType === 'historyRedo') { e.preventDefault(); redo(); }
+      return;
+    }
     if (!ed.isContentEditable) { e.preventDefault(); return; }
     const c = getCaret();
     caretBeforeInput = c;
@@ -1989,18 +2831,19 @@
     }
     const ed = editorEl();
     if (!ed || !ed.contains(e.target)) return;
+    if (inBlockEl(e.target)) { if (e.target.tagName === 'TEXTAREA') onBlockInput(e.target); return; }
     if (e.isComposing || composing) return;
     syncFromDOM();
   });
   el.content.addEventListener('compositionstart', (e) => {
-    if (editorEl() && editorEl().contains(e.target)) {
+    if (editorEl() && editorEl().contains(e.target) && !inBlockEl(e.target)) {
       composing = true;
       caretBeforeInput = getCaret();
       pendingBeforeInput = pendingFor(caretBeforeInput);
     }
   });
   el.content.addEventListener('compositionend', (e) => {
-    if (editorEl() && editorEl().contains(e.target)) { composing = false; syncFromDOM(); }
+    if (editorEl() && editorEl().contains(e.target) && !inBlockEl(e.target)) { composing = false; syncFromDOM(); }
   });
 
   /* —— 剪贴板：复制时同时写入纯文本和带排版的 HTML；粘贴时优先读排版，⇧ 粘贴只取文字 —— */
@@ -2017,7 +2860,7 @@
   }
   el.content.addEventListener('copy', (e) => {
     const ed = editorEl();
-    if (!ed || !ed.contains(e.target)) return;
+    if (!ed || !ed.contains(e.target) || inBlockEl(e.target)) return;
     const c = editorSelection();
     if (!c) return;
     e.preventDefault();
@@ -2025,7 +2868,7 @@
   });
   el.content.addEventListener('cut', (e) => {
     const ed = editorEl();
-    if (!ed || !ed.contains(e.target)) return;
+    if (!ed || !ed.contains(e.target) || inBlockEl(e.target)) return;
     const c = editorSelection();
     if (!c) return;
     e.preventDefault();
@@ -2038,14 +2881,22 @@
   el.content.addEventListener('paste', (e) => {
     const ed = editorEl();
     if (!ed || !ed.contains(e.target)) return;
+    const cd = e.clipboardData;
+    const files = Array.from((cd && cd.files) || []);
+    const text = cd ? cd.getData('text/plain') : '';
+    const blk = inBlockEl(e.target);
+    if (blk && (e.target.tagName === 'TEXTAREA' || !files.length)) return;
     e.preventDefault();
     const plain = plainPasteNext;
     plainPasteNext = false;
     if (!ed.isContentEditable) return;
-    const cd = e.clipboardData;
     const html = !plain && cd && cd.getData('text/html');
     const rich = html ? R.fromHTML(html) : [];
-    const blocks = rich.length ? rich : R.fromPlain(cd && cd.getData('text/plain'));
+    if (files.length && !rich.length && !text.trim()) {
+      insertImageFiles(files);
+      return;
+    }
+    const blocks = rich.length ? rich : R.fromPlain(text);
     if (blocks.length) insertBlocks(blocks, !rich.length);
   });
 
@@ -2092,6 +2943,8 @@
     }
     const ed = editorEl();
     if (!ed || !ed.contains(e.target)) return;
+    const blk = inBlockEl(e.target);
+    if (blk) { if (!e.isComposing) onBlockKey(e, blk); return; }
     if (e.isComposing || composing) return;
     if (ed.isContentEditable && formatShortcut(e)) return;
     if (e.altKey && e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
@@ -2121,7 +2974,32 @@
         const t = $('#title-input');
         t.focus();
         t.setSelectionRange(t.value.length, t.value.length);
+        return;
       }
+    }
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
+      const c = getCaret();
+      const a = current();
+      if (!c || !c.collapsed || !a) return;
+      const i = a.paragraphs.findIndex((p) => p.id === c.pid);
+      const p = a.paragraphs[i];
+      const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+      const q = a.paragraphs[i + (back ? -1 : 1)];
+      if (!p || !isBlock(q)) return;
+      const node = ed.querySelector(`:scope > p[data-pid="${CSS.escape(p.id)}"]`);
+      let edge;
+      if (e.key === 'ArrowLeft') edge = c.offset === 0;
+      else if (e.key === 'ArrowRight') edge = c.offset >= p.text.length;
+      else {
+        const rr = rangeIn(node, c.offset, c.offset).getBoundingClientRect();
+        const pr = node.getBoundingClientRect();
+        const lh = parseFloat(getComputedStyle(node).lineHeight) || 28;
+        const y = rr.height ? (back ? rr.top : rr.bottom) : (back ? pr.top : pr.bottom);
+        edge = back ? y - pr.top < lh * 0.75 : pr.bottom - y < lh * 0.75;
+      }
+      if (!edge) return;
+      e.preventDefault();
+      enterBlock(q.id, back ? 'end' : 'start');
     }
   });
   el.content.addEventListener('focusin', (e) => { if (e.target === editorEl()) clearHighlight('ghost'); });
@@ -2135,7 +3013,7 @@
     const wrap = $('#editor-wrap');
     if (!wrap || dragState) return;
     let pid = null;
-    const p = e.target.closest && e.target.closest('#editor > p');
+    const p = e.target.closest && e.target.closest('#editor > [data-pid]');
     if (p) pid = p.dataset.pid;
     else {
       const it = e.target.closest && e.target.closest('.g-item, .g-bar');
@@ -2165,10 +3043,10 @@
     e.preventDefault();
     const pid = h.dataset.drag;
     const ed = editorEl();
-    const p = ed.querySelector(`p[data-pid="${CSS.escape(pid)}"]`);
+    const p = ed.querySelector(`:scope > [data-pid="${CSS.escape(pid)}"]`);
     const ghost = document.createElement('div');
     ghost.className = 'drag-ghost';
-    ghost.textContent = p.textContent || '（空段落）';
+    ghost.textContent = p.dataset.block === 'img' ? `图片${p.querySelector('.fig-cap').value ? ` · ${p.querySelector('.fig-cap').value}` : ''}` : p.dataset.block === 'table' ? '表格' : (p.textContent || '（空段落）');
     const line = document.createElement('div');
     line.className = 'drop-line';
     line.hidden = true;
@@ -2182,7 +3060,7 @@
       if (Math.abs(ev.clientY - dragState.startY) > 3) dragState.moved = true;
       ghost.style.left = `${ev.clientX + 14}px`;
       ghost.style.top = `${ev.clientY - 10}px`;
-      const paras = $$('p', ed);
+      const paras = edChildren(ed);
       let idx = paras.length;
       for (let i = 0; i < paras.length; i++) {
         const r = paras[i].getBoundingClientRect();
@@ -2245,11 +3123,13 @@
     const a = current();
     if (!a || !ui.caret) { ui.provSel = null; return; }
     const p = a.paragraphs.find((x) => x.id === ui.caret.pid);
-    if (!p || !p.text.trim()) { ui.provSel = null; clearHighlight('prov'); return; }
-    const sentences = D.splitSentences(p.text);
+    const cell = p && p.kind === 'table' ? ui.caret.cell : null;
+    const text = !p ? '' : p.kind === 'table' ? (cell ? B.cellText(p.table, ...cell.split('.')) : '') : p.text;
+    if (!p || !text.trim()) { ui.provSel = null; clearHighlight('prov'); return; }
+    const sentences = D.splitSentences(text);
     let s = sentences.find((x) => ui.caret.offset >= x.start && ui.caret.offset < x.end) || sentences[sentences.length - 1];
     if (!s) { ui.provSel = null; return; }
-    ui.provSel = { pid: p.id, start: s.start, end: s.end, text: s.text.trim() };
+    ui.provSel = { pid: p.id, cell, start: s.start, end: s.end, text: s.text.trim() };
     if (ui.inspectorTab === 'prov' && inspectorVisible()) {
       const node = editorEl() && editorEl().querySelector(`p[data-pid="${CSS.escape(p.id)}"]`);
       if (node) setHighlight('prov', [rangeIn(node, s.start, s.start + s.text.trimEnd().length)]);
@@ -2275,7 +3155,7 @@
     const a = current();
     if (!a || ui.mode !== 'write') return;
     if (S.activeRound(a)) { setMode('review'); return; }
-    const order = a.paragraphs.filter((p) => a.marks[p.id] && p.text.trim()).map((p) => p.id);
+    const order = a.paragraphs.filter((p) => a.marks[p.id] && markable(p)).map((p) => p.id);
     if (!order.length) { toast('先标记段落'); return; }
     pushUndo('送审', { caret: getCaret() });
     const round = S.beginRound(a, Date.now());
@@ -2290,11 +3170,13 @@
         ui.running.current = pid;
         ui.running.status[pid] = 'run';
         refreshRunUI(a.id);
-        const text = a.paragraphs.find((p) => p.id === pid).text;
-        const r = await AI.revise(text, a.marks[pid].instruction, { signal: controller.signal });
+        const p = a.paragraphs.find((x) => x.id === pid);
+        const r = isBlock(p)
+          ? await AI.reviseBlock(p, a.marks[pid].instruction, { signal: controller.signal })
+          : await AI.revise(p.text, a.marks[pid].instruction, { signal: controller.signal });
         results[pid] = r;
         ui.running.status[pid] = 'done';
-        ui.running.counts[pid] = D.countChanges(D.diffText(text, r.text)).hunks;
+        ui.running.counts[pid] = isBlock(p) ? blockChangeCount(p, r) : D.countChanges(D.diffText(p.text, r.text)).hunks;
       }
       S.completeRound(a, round, results, Date.now());
       ui.running = null;
@@ -2326,6 +3208,26 @@
     }
   }
 
+  function blockChangeCount(p, r) {
+    if (r.remove) return 1;
+    const q = r.para;
+    if (!q) return 0;
+    if (p.kind === 'img') return (q.img.asset !== p.img.asset ? 1 : 0) + D.countChanges(D.diffText(p.text, q.text)).hunks;
+    const rows = B.mergeOrder(p.table.rows.map((x) => x.id), q.table.rows.map((x) => x.id));
+    const cols = B.mergeOrder(p.table.cols, q.table.cols);
+    let n = rows.filter((x) => x.status !== 'same').length + cols.filter((x) => x.status !== 'same').length;
+    for (const row of rows) if (row.status === 'same') for (const c of cols) if (c.status === 'same') n += D.countChanges(D.diffText(B.cellText(p.table, row.id, c.id), B.cellText(q.table, row.id, c.id))).hunks;
+    return n;
+  }
+
+  /** 检查器和列表里用的段落摘要：图片显示图注，表格显示行列数。 */
+  function excerptOf(p) {
+    if (!p) return '';
+    if (p.kind === 'img') return `图片${p.text ? ` · ${p.text}` : ''}`;
+    if (p.kind === 'table') return `表格 · ${p.table.rows.length} 行 ${p.table.cols.length} 列`;
+    return p.text;
+  }
+
   function cancelRun() {
     if (ui.running) ui.running.controller.abort();
   }
@@ -2341,6 +3243,10 @@
   let reviewModelCache = null;
 
   function hunkLabel(h, n) {
+    if (h.kind && h.kind !== 'text') {
+      const st = !h.decision ? '未决定' : h.decision.choice === 'adopt' ? '已采用' : '已保留原样';
+      return `修改 ${n}：${h.label}。${st}`;
+    }
     let desc;
     if (h.del && h.ins) desc = `把“${clip(h.del, 30)}”改为“${clip(h.ins, 30)}”`;
     else if (h.del) desc = `删去“${clip(h.del, 30)}”`;
@@ -2392,6 +3298,123 @@
 
   const blockOpen = (p, nums, cls = '') => `<p class="${R.blockClass(p)} ${cls}"${nums.get(p.id) ? ` data-num="${nums.get(p.id)}"` : ''}>`;
 
+  /* —— 审阅和历史里的图片、表格：图片按整张对照，表格按行列对齐、逐格对照 —— */
+
+  const decCls = (h) => (h ? (h.decision ? `is-${h.decision.choice}` : 'is-pending') : '');
+
+  function blockHunkAttrs(h, n, variant, extra = '', primary = true) {
+    const focused = ui.focusKey === h.key;
+    const live = variant !== 'base' && variant !== 'result';
+    const a11y = primary ? ` role="button" tabindex="${focused && live ? 0 : -1}" aria-label="${esc(hunkLabel(h, n))}"` : '';
+    return `class="bh ${decCls(h)} ${focused ? 'is-focused' : ''} ${extra}" data-key="${h.key}"${a11y}`;
+  }
+
+  function figStatic(p, cls = '', inner) {
+    return `<figure class="r-fig k-img w-${p.img.w} ${cls}"${figStyle(p)}><div class="fig-media">${inner || imgHTML(p)}</div>${p.text ? `<figcaption>${esc(p.text)}</figcaption>` : ''}</figure>`;
+  }
+
+  function tableStatic(p, cls = '') {
+    const t = p.table;
+    const rows = t.rows.map((r, i) => `<tr>${t.cols.map((c) => { const tag = t.head && i === 0 ? 'th' : 'td'; return `<${tag}>${esc(B.cellText(t, r, c))}</${tag}>`; }).join('')}</tr>`).join('');
+    return `<div class="r-tbl-wrap ${cls}"><div class="tbl-scroll"><table class="tbl r-tbl${t.head ? ' has-head' : ''}"><tbody>${rows}</tbody></table></div></div>`;
+  }
+
+  const blockStatic = (p, cls = '') => (p.kind === 'img' ? figStatic(p, cls) : tableStatic(p, cls));
+
+  function figReviewHTML(para, variant, counter) {
+    const p = para.src;
+    const ai = para.aiSrc;
+    const h = para.hunks.find((x) => x.kind === 'img' || x.kind === 'block');
+    const cap = para.groups[0];
+    const capHTML = cap.hunks.length ? paraHTML(cap, variant, counter) : esc(p.text);
+    const d = h && h.decision;
+    let media;
+    if (!h) media = imgHTML(p);
+    else {
+      const n = counter.get(h.key);
+      const attrs = (extra) => blockHunkAttrs(h, n, variant, extra);
+      if (h.op === 'replace') {
+        if (variant === 'base') media = `<div ${attrs('fig-one')}>${imgHTML(p)}</div>`;
+        else if (variant === 'ai') media = `<div ${attrs('fig-one is-new')}>${imgHTML(ai)}</div>`;
+        else if (d) media = `<div ${attrs('fig-one fig-chosen')}>${imgHTML(d.choice === 'adopt' ? ai : p)}</div>`;
+        else if (variant === 'result') media = `<div ${attrs('fig-one fig-ghost')}>${imgHTML(p)}</div>`;
+        else media = `<div ${attrs('fig-swap')}><span class="fig-old">${imgHTML(p)}</span><span class="fig-arrow" aria-hidden="true">${icon('i-chevron-right', 'sm')}</span><span class="fig-new">${imgHTML(ai)}</span></div>`;
+      } else {
+        const gone = variant === 'ai' || (d && d.choice === 'adopt');
+        const ghost = variant === 'result' && !d;
+        media = `<div ${attrs(`fig-one ${gone ? 'fig-removed' : ''} ${!d && variant === 'inline' ? 'fig-removing' : ''} ${ghost ? 'fig-ghost' : ''}`)}>${imgHTML(p)}${gone ? '<span class="fig-tag">删去</span>' : ''}</div>`;
+      }
+    }
+    return `<figure class="r-fig k-img w-${p.img.w} v-${variant}"${figStyle(p)}>${media}${p.text || (ai && ai.text) ? `<figcaption>${capHTML}</figcaption>` : ''}</figure>`;
+  }
+
+  function tableReviewHTML(para, variant, counter) {
+    const st = para.src.table;
+    const at = para.aiSrc.table;
+    const hk = (kind, id) => para.hunks.find((h) => h.kind === kind && h.id === id);
+    const shown = (kind, it) => {
+      if (it.status === 'same' || variant === 'inline') return true;
+      const h = hk(kind, it.id);
+      const d = h && h.decision;
+      if (variant === 'base') return it.status === 'remove';
+      if (variant === 'ai') return it.status === 'add';
+      return d ? (it.status === 'add') === (d.choice === 'adopt') : it.status === 'remove';
+    };
+    const cols = para.cols.filter((c) => shown('col', c));
+    const rows = para.rows.filter((r) => shown('row', r));
+    const headId = st.head && st.rows[0] ? st.rows[0].id : null;
+    const body = rows.map((r, ri) => {
+      const rh = r.status !== 'same' ? hk('row', r.id) : null;
+      const cells = cols.map((c) => {
+        const ch = c.status !== 'same' ? hk('col', c.id) : null;
+        const k = `${r.id}.${c.id}`;
+        let inner;
+        if (para.cells[k]) inner = paraHTML(para.cells[k], variant, counter);
+        else inner = esc(B.cellText(r.status === 'add' || c.status === 'add' ? at : st, r.id, c.id));
+        const tag = r.id === headId ? 'th' : 'td';
+        const attrs = ch ? ` ${blockHunkAttrs(ch, counter.get(ch.key), variant, `st-${c.status}`, ri === 0)}` : '';
+        return `<${tag}${attrs}>${inner}</${tag}>`;
+      }).join('');
+      return `<tr${rh ? ` ${blockHunkAttrs(rh, counter.get(rh.key), variant, `st-${r.status}`)}` : ''}>${cells}</tr>`;
+    }).join('');
+    return `<div class="r-tbl-wrap v-${variant}"><div class="tbl-scroll"><table class="tbl r-tbl${st.head ? ' has-head' : ''}"><tbody>${body}</tbody></table></div></div>`;
+  }
+
+  function blockReviewHTML(para, variant, counter) {
+    return para.kind === 'img' ? figReviewHTML(para, variant, counter) : tableReviewHTML(para, variant, counter);
+  }
+
+  const segHTML = (segments) => segments.map((s) => (s.type === 'eq' ? esc(s.text) : `${s.del ? `<span class="seg-del">${esc(s.del)}</span>` : ''}${s.ins ? `<span class="seg-ins">${esc(s.ins)}</span>` : ''}`)).join('');
+
+  /** 历史对比里的表格：两稿按行列 ID 对齐，增删的行列整行整列标色，其余单元格逐词对比。 */
+  function tableDiffHTML(bp, tp, cls) {
+    const st = bp.table;
+    const tt = tp.table;
+    const cols = B.mergeOrder(st.cols, tt.cols);
+    const rows = B.mergeOrder(st.rows.map((r) => r.id), tt.rows.map((r) => r.id));
+    const headId = tt.head && tt.rows[0] ? tt.rows[0].id : null;
+    const body = rows.map((r) => `<tr class="st-${r.status}">${cols.map((c) => {
+      let inner;
+      if (r.status === 'same' && c.status === 'same') inner = segHTML(D.diffText(B.cellText(st, r.id, c.id), B.cellText(tt, r.id, c.id)));
+      else {
+        const gone = r.status === 'remove' || c.status === 'remove';
+        const v = B.cellText(gone ? st : tt, r.id, c.id);
+        inner = v ? `<span class="${gone ? 'seg-del' : 'seg-ins'}">${esc(v)}</span>` : '';
+      }
+      const tag = r.id === headId ? 'th' : 'td';
+      return `<${tag} class="st-${c.status}">${inner}</${tag}>`;
+    }).join('')}</tr>`).join('');
+    return `<div class="r-tbl-wrap ${cls}"><div class="tbl-scroll"><table class="tbl r-tbl${tt.head ? ' has-head' : ''}"><tbody>${body}</tbody></table></div></div>`;
+  }
+
+  function figDiffHTML(bp, tp, cls, blockChanged) {
+    const media = blockChanged
+      ? `<div class="fig-swap"><span class="fig-old">${imgHTML(bp)}</span><span class="fig-arrow" aria-hidden="true">${icon('i-chevron-right', 'sm')}</span><span class="fig-new">${imgHTML(tp)}</span></div>`
+      : imgHTML(tp);
+    const cap = bp.text !== tp.text ? segHTML(D.diffText(bp.text, tp.text)) : esc(tp.text);
+    return `<figure class="r-fig k-img w-${tp.img.w} ${cls}"${figStyle(tp)}><div class="fig-media">${media}</div>${cap ? `<figcaption>${cap}</figcaption>` : ''}</figure>`;
+  }
+
   function renderReview(a) {
     const round = S.activeRound(a);
     if (!round || round.status !== 'pending') {
@@ -2415,21 +3438,23 @@
     const nums = R.numbering(model.submitted.paragraphs);
     const body = model.paras.map((para) => {
       const open = (cls) => blockOpen(para.src, nums, `r-para ${cls || ''}`);
-      if (!para.marked) return `${open('context')}${R.inlineHTML(para.src.text, para.src.runs)}</p>`;
+      const block = isBlock(para.src);
+      if (!para.marked) return block ? blockStatic(para.src, 'context') : `${open('context')}${R.inlineHTML(para.src.text, para.src.runs)}</p>`;
       const head = `<div class="r-head">
           <span class="tag">${esc(S.instructionLabel(para.meta))}</span>
           <span class="grow"></span>
           ${para.hunks.length > 1 ? `<span class="r-bulk"><button type="button" class="link" data-bulk="keep" data-pid="${para.id}">全部保留</button><button type="button" class="link" data-bulk="adopt" data-pid="${para.id}">全部采用</button></span>` : ''}
         </div>`;
       let inner;
+      const one = (variant) => (block ? blockReviewHTML(para, variant, counter) : `${open(`v-${variant}`)}${paraHTML(para.groups[0], variant, counter)}</p>`);
       if (!para.hunks.length) {
-        inner = `${open()}${R.inlineHTML(para.src.text, para.src.runs)}</p><p class="r-note">没有修改</p>`;
+        inner = `${block ? blockStatic(para.src) : `${open()}${R.inlineHTML(para.src.text, para.src.runs)}</p>`}<p class="r-note">没有修改</p>`;
       } else if (ui.diffLayout === 'stacked') {
-        inner = `<div class="stack-label">送审稿</div>${open()}${paraHTML(para, 'base', counter)}</p>
-          <div class="stack-label">AI 改稿</div>${open()}${paraHTML(para, 'ai', counter)}</p>
-          <div class="stack-label">定稿</div>${open()}${paraHTML(para, 'result', counter)}</p>`;
+        inner = `<div class="stack-label">送审稿</div>${one('base')}
+          <div class="stack-label">AI 改稿</div>${one('ai')}
+          <div class="stack-label">定稿</div>${one('result')}`;
       } else {
-        inner = `${open()}${paraHTML(para, 'inline', counter)}</p>`;
+        inner = one('inline');
       }
       return `<section class="r-block ${para.id === focusPid ? 'is-current' : ''}" data-pid="${para.id}" aria-label="第 ${para.index + 1} 段，${para.hunks.length} 处修改">${head}${inner}</section>`;
     }).join('');
@@ -2454,27 +3479,35 @@
     const h = findHunk(ui.focusKey);
     if (!h) return;
     const nodes = $$(`[data-key="${CSS.escape(ui.focusKey)}"]`, page);
-    const anchor = ui.diffLayout === 'stacked' ? (nodes[1] || nodes[0]) : nodes[0];
+    const anchor = hunkTarget(nodes);
     if (!anchor) return;
     const d = h.decision;
+    const blockH = h.kind && h.kind !== 'text';
     const bar = document.createElement('div');
     bar.className = 'hunk-bar';
     bar.id = 'hunk-bar';
     bar.setAttribute('role', 'toolbar');
     bar.setAttribute('aria-label', '处理这处修改');
     bar.innerHTML = `<div class="row">
-        <button type="button" class="choice" data-choice="keep" aria-pressed="${Boolean(d && d.choice === 'keep')}" aria-keyshortcuts="O" title="保留原句（O）">${icon('i-keep', 'sm')}保留</button>
+        <button type="button" class="choice" data-choice="keep" aria-pressed="${Boolean(d && d.choice === 'keep')}" aria-keyshortcuts="O" title="${blockH ? '保留原样' : '保留原句'}（O）">${icon('i-keep', 'sm')}保留</button>
         <button type="button" class="choice" data-choice="adopt" aria-pressed="${Boolean(d && d.choice === 'adopt')}" aria-keyshortcuts="A" title="采用改法（A）">${icon('i-check', 'sm')}采用</button>
-        <button type="button" class="choice" data-choice="rewrite" aria-pressed="${Boolean(d && d.choice === 'rewrite')}" aria-keyshortcuts="E" title="自己重写（E）">${icon('i-pen', 'sm')}重写</button>
+        ${blockH ? '' : `<button type="button" class="choice" data-choice="rewrite" aria-pressed="${Boolean(d && d.choice === 'rewrite')}" aria-keyshortcuts="E" title="自己重写（E）">${icon('i-pen', 'sm')}重写</button>`}
       </div>${inspectorVisible() ? '' : `<div class="why">${esc(h.reason)}</div>`}`;
     page.appendChild(bar);
-    const rects = anchor.getClientRects();
-    const last = rects[rects.length - 1] || anchor.getBoundingClientRect();
+    const box = (blockH && (anchor.closest('figure') || (h.kind === 'col' && anchor.closest('table')))) || anchor;
+    const rects = box.getClientRects();
+    const last = rects[rects.length - 1] || box.getBoundingClientRect();
     const pr = page.getBoundingClientRect();
     const top = last.bottom - pr.top + 8;
     const left = Math.max(12, Math.min(last.left - pr.left - 10, pr.width - bar.offsetWidth - 12));
     bar.style.top = `${top}px`;
     bar.style.left = `${left}px`;
+  }
+
+  /** 一处修改在页面上的落点：对照布局里优先取“AI 改稿”那一份，结构修改取带按钮角色的那个节点。 */
+  function hunkTarget(nodes) {
+    const pool = ui.diffLayout === 'stacked' ? (nodes.filter((n) => n.closest('.v-ai')).length ? nodes.filter((n) => n.closest('.v-ai')) : nodes) : nodes;
+    return pool.find((n) => n.getAttribute('role') === 'button') || pool[0] || null;
   }
 
   function findHunk(key) {
@@ -2495,7 +3528,7 @@
     nodes.forEach((n) => n.classList.add('is-focused'));
     const pid = (ui.focusKey || '').split(':')[0];
     $$('.r-block', el.content).forEach((b) => b.classList.toggle('is-current', b.dataset.pid === pid));
-    const target = ui.diffLayout === 'stacked' ? (nodes[1] || nodes[0]) : nodes[0];
+    const target = hunkTarget(nodes);
     if (target) {
       target.setAttribute('tabindex', '0');
       if (opts.focus !== false) target.focus({ preventScroll: true });
@@ -2521,11 +3554,14 @@
   }
 
   const CHOICE_LABEL = { adopt: '采用改法', keep: '保留原句', rewrite: '自己重写' };
+  const choiceLabel = (key, choice) => { const h = findHunk(key); return h && h.kind !== 'text' && choice === 'keep' ? '保留原样' : CHOICE_LABEL[choice]; };
 
   function decide(key, choice, text) {
     const a = current();
     const round = a && S.activeRound(a);
     if (!round || round.status !== 'pending') return;
+    const target = findHunk(key);
+    if (choice === 'rewrite' && target && target.kind !== 'text') return;
     const existing = round.decisions[key];
     pushUndo(existing && existing.choice === choice && choice !== 'rewrite' ? '取消决定' : CHOICE_LABEL[choice], { caret: null });
     if (existing && existing.choice === choice && choice !== 'rewrite') delete round.decisions[key];
@@ -2542,7 +3578,7 @@
     focusHunk(ui.focusKey, { scroll: true });
     renderToolbar();
     const left = fresh.filter((h) => !h.decision).length;
-    announce(removed ? '已取消这处的决定' : `已${CHOICE_LABEL[choice]}。${left ? `还有 ${left} 处未决定` : '所有修改都已决定，可以完成本轮'}`);
+    announce(removed ? '已取消这处的决定' : `已${choiceLabel(key, choice)}。${left ? `还有 ${left} 处未决定` : '所有修改都已决定，可以完成本轮'}`);
   }
 
   function bulkDecide(pid, choice) {
@@ -2572,10 +3608,9 @@
 
   function openRewrite(key) {
     const h = findHunk(key);
-    if (!h) return;
-    const para = reviewModelCache.paras.find((p) => p.id === h.pid);
-    const anchorNodes = $$(`[data-key="${CSS.escape(key)}"]`, el.content);
-    const anchor = (ui.diffLayout === 'stacked' ? anchorNodes[1] : anchorNodes[0]) || anchorNodes[0];
+    if (!h || h.kind !== 'text') return;
+    const para = { base: h.base, after: h.after };
+    const anchor = hunkTarget($$(`[data-key="${CSS.escape(key)}"]`, el.content));
     const initial = h.decision && h.decision.choice === 'rewrite' ? h.decision.text : (h.ins || h.del);
     const bar = $('#hunk-bar');
     if (bar) bar.remove();
@@ -2741,7 +3776,7 @@
     const flush = () => {
       if (!sameRun.length) return;
       if (ui.onlyChanges) parts.push(`<div class="h-collapsed"><button type="button" data-expand>${sameRun.length} 段未改动</button></div>`);
-      else parts.push(...sameRun.map((r) => `${blockOpen(toById.get(r.id), nums, 'h-row same')}${R.inlineHTML(r.target, toById.get(r.id).runs)}</p>`));
+      else parts.push(...sameRun.map((r) => { const p = toById.get(r.id); return isBlock(p) ? blockStatic(p, 'h-row same') : `${blockOpen(p, nums, 'h-row same')}${R.inlineHTML(r.target, p.runs)}</p>`; }));
       sameRun = [];
     };
     for (const r of rows) {
@@ -2750,6 +3785,20 @@
       const fmtChanged = r.status === 'same' && !R.sameFormat(bp, tp);
       if (r.status === 'same' && !r.moved && !fmtChanged) { sameRun.push(r); continue; }
       flush();
+      const kindOf = (p) => (p ? p.kind || 'text' : null);
+      if (r.status !== 'added' && r.status !== 'removed' && kindOf(bp) !== kindOf(tp)) {
+        parts.push(isBlock(bp) ? blockStatic(bp, 'h-row removed') : `${blockOpen(bp, fromNums, 'h-row removed')}<span class="seg-del">${R.inlineHTML(bp.text, bp.runs, NO_COLOR)}</span></p>`);
+        parts.push(isBlock(tp) ? blockStatic(tp, 'h-row added') : `${blockOpen(tp, nums, 'h-row added')}<span class="seg-ins">${R.inlineHTML(tp.text, tp.runs, NO_COLOR)}</span></p>`);
+        continue;
+      }
+      const blockBadges = (p, extra = '') => `<div class="h-badges">${extra}${r.moved ? '<span class="h-badge">已移动</span>' : ''}${fmtChanged ? '<span class="h-badge fmt" title="只改了排版，内容没有变化">格式</span>' : ''}</div>`;
+      if (isBlock(tp || bp)) {
+        if (fmtChanged) fmtOnly++;
+        if (r.status === 'added') parts.push(`<div class="h-block added">${blockBadges(tp, '<span class="h-badge">新增</span>')}${blockStatic(tp, 'h-new')}</div>`);
+        else if (r.status === 'removed') parts.push(`<div class="h-block removed">${blockBadges(bp, '<span class="h-badge">删去</span>')}${blockStatic(bp, 'h-old')}</div>`);
+        else parts.push(`<div class="h-block ${r.status}">${blockBadges(tp)}${tp.kind === 'img' ? figDiffHTML(bp, tp, '', r.blockChanged) : tableDiffHTML(bp, tp, '')}</div>`);
+        continue;
+      }
       if (r.status === 'added') parts.push(`${blockOpen(tp, nums, 'h-row added')}<span class="h-badge">新增</span><span class="seg-ins">${R.inlineHTML(tp.text, tp.runs, NO_COLOR)}</span></p>`);
       else if (r.status === 'removed') parts.push(`${blockOpen(bp, fromNums, 'h-row removed')}<span class="h-badge">删去</span><span class="seg-del">${R.inlineHTML(bp.text, bp.runs, NO_COLOR)}</span></p>`);
       else {
@@ -2954,7 +4003,7 @@
         const p = a.paragraphs.find((x) => x.id === pid);
         const st = run ? run.status[pid] : 'wait';
         const label = st === 'run' ? '改稿中' : st === 'done' ? `${run.counts[pid] || 0} 处` : '';
-        return `<li><span class="spinner ${st === 'run' ? '' : st === 'done' ? 'done' : 'idle'}" aria-hidden="true"></span><span class="ex">${esc(clip(p ? p.text : '', 22))}</span><span class="st">${label}</span></li>`;
+        return `<li><span class="spinner ${st === 'run' ? '' : st === 'done' ? 'done' : 'idle'}" aria-hidden="true"></span><span class="ex">${esc(clip(excerptOf(p), 22))}</span><span class="st">${label}</span></li>`;
       }).join('');
       return `${head}<div class="insp-body"><ul class="run-list" aria-live="polite">${items}</ul></div>
         <div class="insp-foot"><button type="button" class="btn block" data-act="cancel-run">取消改稿</button></div>`;
@@ -2971,7 +4020,7 @@
       const m = a.marks[p.id];
       const isCustom = Boolean(m.custom) || m.instruction === 'custom';
       return `<li class="mark-item ${p.id === caretPid ? 'is-current' : ''}">
-        <button type="button" class="excerpt" data-goto="${p.id}">${esc(p.text)}</button>
+        <button type="button" class="excerpt" data-goto="${p.id}">${esc(excerptOf(p))}</button>
         <div class="ctrl">
           <select class="select" data-instr="${p.id}" aria-label="第 ${idx} 段的修改要求">
             ${AI.INSTRUCTIONS.map((it) => `<option value="${it.id}" ${!isCustom && m.instruction === it.id ? 'selected' : ''}>${it.label}</option>`).join('')}
@@ -2995,7 +4044,7 @@
     if (!sel) {
       return `<div class="insp-body"><p class="insp-note">把光标放在一句话上</p></div>`;
     }
-    const { steps, records } = S.provenance(a, sel.pid, sel.text);
+    const { steps, records } = S.provenance(a, sel.pid, sel.text, sel.cell);
     const real = steps.filter((s) => s.text);
     const head = `<div class="insp-body"><div class="quote-current">${esc(sel.text)}</div>`;
     if (real.length <= 1) {
@@ -3069,20 +4118,27 @@
     if (h) {
       const para = m.paras.find((p) => p.id === h.pid);
       const d = h.decision;
-      const mine = d && d.choice === 'rewrite'
-        ? `<dt>你的</dt><dd><p class="sent">${esc(para.base.slice(D.sentenceAround(para.base, h.bStart, h.bEnd).start, h.bStart))}<mark class="mine ${d.text ? '' : 'void'}">${esc(d.text)}</mark>${esc(para.base.slice(h.bEnd, D.sentenceAround(para.base, h.bStart, h.bEnd).end))}</p></dd>` : '';
+      const blockH = h.kind !== 'text';
+      const mine = !blockH && d && d.choice === 'rewrite'
+        ? `<dt>你的</dt><dd><p class="sent">${esc(h.base.slice(D.sentenceAround(h.base, h.bStart, h.bEnd).start, h.bStart))}<mark class="mine ${d.text ? '' : 'void'}">${esc(d.text)}</mark>${esc(h.base.slice(h.bEnd, D.sentenceAround(h.base, h.bStart, h.bEnd).end))}</p></dd>` : '';
       const btn = (c, ic, label, key) => `<button type="button" class="choice" data-insp-choice="${c}" aria-pressed="${Boolean(d && d.choice === c)}" aria-keyshortcuts="${key}" title="${label}（${key}）">${icon(ic, 'sm')}<span>${label}</span></button>`;
+      let where = `第 ${para.index + 1} 段`;
+      if (h.cell) {
+        const [row, col] = h.cell.split('.');
+        const t = para.src.table;
+        where += ` · 第 ${t.rows.findIndex((r) => r.id === row) + 1} 行第 ${t.cols.indexOf(col) + 1} 列`;
+      }
       card = `<div class="card">
-        <h4>修改 ${n} / ${list.length} · 第 ${para.index + 1} 段<span style="flex:1"></span>
+        <h4>修改 ${n} / ${list.length} · ${where}<span style="flex:1"></span>
           <span class="nav-pair"><button type="button" class="icon-btn sm" data-step="-1" aria-label="上一处修改（K）" ${n <= 1 ? 'disabled' : ''}>${icon('i-chevron-left', 'sm')}</button><button type="button" class="icon-btn sm" data-step="1" aria-label="下一处修改（J）" ${n >= list.length ? 'disabled' : ''}>${icon('i-chevron-right', 'sm')}</button></span></h4>
         <dl class="kv">
-          <dt>原句</dt><dd><p class="sent">${sentenceHTML(para.base, h.bStart, h.bEnd, 'del')}</p></dd>
-          <dt>改句</dt><dd><p class="sent">${sentenceHTML(para.after, h.aStart, h.aEnd, 'ins')}</p></dd>
+          ${blockH ? blockCardHTML(para, h) : `<dt>原句</dt><dd><p class="sent">${sentenceHTML(h.base, h.bStart, h.bEnd, 'del')}</p></dd>
+          <dt>改句</dt><dd><p class="sent">${sentenceHTML(h.after, h.aStart, h.aEnd, 'ins')}</p></dd>`}
           ${mine}
         </dl>
         <p class="small" style="margin-top:10px;color:var(--text-2)"><span class="tagchip">${esc(h.tag)}</span>${esc(h.reason)}</p>
-        <div class="choice-grid" role="group" aria-label="处理这处修改">
-          ${btn('keep', 'i-keep', '保留原句', 'O')}${btn('adopt', 'i-check', '采用改法', 'A')}${btn('rewrite', 'i-pen', '自己重写', 'E')}
+        <div class="choice-grid ${blockH ? 'two' : ''}" role="group" aria-label="处理这处修改">
+          ${btn('keep', 'i-keep', blockH ? '保留原样' : '保留原句', 'O')}${btn('adopt', 'i-check', '采用改法', 'A')}${blockH ? '' : btn('rewrite', 'i-pen', '自己重写', 'E')}
         </div>
       </div>`;
     }
@@ -3097,6 +4153,21 @@
       <div class="insp-foot">
         <button type="button" class="btn primary block" data-act="finish">完成本轮</button>
       </div>`;
+  }
+
+  /** 检查器里一处图片或结构修改的对照：原图和新图，或增删的那一行、一列。 */
+  function blockCardHTML(para, h) {
+    if (h.kind === 'img' || h.kind === 'block') {
+      const old = para.src.kind === 'img' ? `<div class="insp-thumb">${imgHTML(para.src)}</div>` : esc(excerptOf(para.src));
+      const now = h.op === 'remove' ? '<p class="sent">删去</p>' : `<div class="insp-thumb">${imgHTML(para.aiSrc)}</div>`;
+      return `<dt>原来</dt><dd>${old}</dd><dt>改为</dt><dd>${now}</dd>`;
+    }
+    const t = h.op === 'add' ? para.aiSrc.table : para.src.table;
+    const values = h.kind === 'row'
+      ? t.cols.map((c) => B.cellText(t, h.id, c))
+      : t.rows.map((r) => B.cellText(t, r, h.id));
+    const list = values.map((v) => `<span class="cellchip ${h.op === 'add' ? 'ins' : 'del'}">${esc(v) || '&nbsp;'}</span>`).join('');
+    return `<dt>${h.op === 'add' ? '新增' : '删去'}</dt><dd><div class="cellchips">${list}</div></dd>`;
   }
 
   function inspectorHistory(a, close) {
@@ -3150,7 +4221,8 @@
     if (b.dataset.unmark) { toggleMark(b.dataset.unmark, false); return; }
     if (b.dataset.goto) {
       const p = a.paragraphs.find((x) => x.id === b.dataset.goto);
-      if (p) { setCaret(p.id, p.text.length); flashParagraph(p.id); }
+      if (p && isBlock(p)) selectBlock(p.id);
+      else if (p) { setCaret(p.id, p.text.length); flashParagraph(p.id); }
       return;
     }
     if (b.dataset.act === 'submit') { submitRound(); return; }
@@ -3283,6 +4355,8 @@
         ${row('标记给 AI 改稿', [`${M}${SH}M`])}
         ${row('请 AI 改稿', [`${M}${K.enter}`])}
         ${row('上移、下移段落', [`${K.alt}${SH}${K.up}`, `${K.alt}${SH}${K.down}`])}
+        ${row('表格：下一格、上一格', ['Tab', `${SH}Tab`])}
+        ${row('表格：选中整个表格', ['Esc'])}
         ${row('存为版本', [`${M}S`])}
         ${row('撤销、重做', [`${M}Z`, `${M}${SH}Z`])}
         ${row('移到排版工具栏', [`${K.alt}F10`])}
@@ -3301,9 +4375,9 @@
       wide: true,
       body: `<p>Redraft 是以 Diff 为核心的写作编辑器。这个网页原型用来体验它的交互；正式产品计划为原生 macOS 应用。</p>
         <ul class="about-list">
-          <li><b>真实运行：</b>排版（样式、字体、字号、粗斜体、颜色、对齐、列表、缩进、行距）、撤销重做、标记、版本、任意两稿对比、逐句溯源、改写范例、Markdown 与 HTML 导出。</li>
-          <li><b>模拟：</b>AI 改稿。示例段落使用预置改法；其他段落只做删赘词等本地规则精简。没有网络请求。</li>
-          <li><b>保存：</b>内容只保存在这个浏览器里。</li>
+          <li><b>真实运行：</b>排版（样式、字体、字号、粗斜体、颜色、对齐、列表、缩进、行距）、图片与表格、撤销重做、标记、版本、任意两稿对比、逐句溯源、改写范例、Markdown 与 HTML 导出。</li>
+          <li><b>模拟：</b>AI 改稿。示例段落使用预置改法；其他段落只做删赘词等本地规则精简。模拟 AI 不识别图片内容：换图和增删表格行列只来自示例预置，图注和单元格文字按同样的本地规则精简。没有网络请求。</li>
+          <li><b>保存：</b>内容和图片只保存在这个浏览器里，不上传。</li>
         </ul>`,
       actions: [{ label: '好', value: null, primary: true }],
     });
@@ -3375,11 +4449,12 @@
       syncFormatBar();
       updateFbFade();
       renderGutter();
+      positionImgBar();
       if (ui.mode === 'review') positionHunkBar();
     }, 80);
   });
   el.app.addEventListener('transitionend', (e) => {
-    if (e.target === el.app) { renderGutter(); if (ui.mode === 'review') positionHunkBar(); }
+    if (e.target === el.app) { renderGutter(); positionImgBar(); if (ui.mode === 'review') positionHunkBar(); }
   });
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => renderGutter());
 

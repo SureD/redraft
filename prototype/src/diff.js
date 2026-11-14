@@ -186,6 +186,9 @@
     return keep;
   }
 
+  /** 文字以外的内容：图片段落换了图也算改动；表格的结构变化已经体现在它的 text 里。 */
+  const blockSig = (p) => (p.kind === 'img' && p.img ? `${p.img.asset || ''}` : '');
+
   /**
    * 段落层对齐：段落有稳定 ID（对应 Loro Cursor 的身份），按目标稿顺序输出，
    * 被删段落插在它原来前一段之后。
@@ -217,11 +220,14 @@
       if (!baseIndex.has(p.id)) {
         rows.push({ id: p.id, status: 'added', base: '', target: p.text, segments: [{ type: 'chg', del: '', ins: p.text }] });
       } else {
-        const base = baseParas[baseIndex.get(p.id)].text;
+        const bp = baseParas[baseIndex.get(p.id)];
+        const base = bp.text;
         const segments = diffText(base, p.text);
+        const blockChanged = blockSig(bp) !== blockSig(p);
         rows.push({
           id: p.id,
-          status: base === p.text ? 'same' : 'changed',
+          status: base === p.text && !blockChanged ? 'same' : 'changed',
+          blockChanged,
           moved: movedIds.has(p.id),
           base,
           target: p.text,

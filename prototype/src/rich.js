@@ -5,11 +5,14 @@
  *   字符级  runs = [{ n, b, i, u, s, f, z, c, h }]，n 之和等于 text.length；全是默认样式时省略
  * 文字变化时（AI 改稿、作者取舍）用同一套逐词对比把字符样式搬到新文字上，
  * 所以排版改动不会被算成文字修改，文字修改也不会丢掉排版。
+ * 图片和表格段落（kind）没有段落样式和字符样式，它们的复制、清理、导出交给 RedraftBlocks。
  */
 (function (global) {
   'use strict';
 
   const D = global.RedraftDiff;
+  const B = global.RedraftBlocks;
+  const isBlock = B.isBlock;
 
   const BLOCKS = [
     { id: 'p', label: '正文', size: 17, lh: 1.9 },
@@ -254,12 +257,17 @@
   const lineHeight = (p) => p.lh || BLOCK[typeOf(p)].lh;
 
   function clonePara(p) {
+    if (isBlock(p)) return B.cloneBlock(p);
     const q = { id: p.id, text: String(p.text ?? ''), ...blockOf(p) };
     return setRuns(q, runsOf({ text: q.text, runs: p.runs }));
   }
 
-  /** 读取旧数据或外部数据时使用：丢掉无效的样式，文字原样保留。 */
+  /** 读取旧数据或外部数据时使用：丢掉无效的样式，文字原样保留。结构不完整的图片或表格退回为文字段落。 */
   function sanitize(p) {
+    if (p && p.kind) {
+      const b = B.sanitizeBlock(p);
+      if (b) return b;
+    }
     const text = typeof p.text === 'string' ? p.text : String(p.text ?? '');
     const q = { id: p.id, text, ...blockOf(p) };
     if (Array.isArray(p.runs)) {
@@ -272,6 +280,10 @@
   /** 文字换成 text，段落样式不变，字符样式按逐词对比搬运。 */
   function retext(p, text) {
     const q = clonePara(p);
+    if (isBlock(p)) {
+      if (p.kind === 'img') q.text = text.replace(/\n/g, ' ');
+      return q;
+    }
     q.text = text;
     delete q.runs;
     return setRuns(q, carry(p, text));
@@ -279,6 +291,7 @@
 
   function sameFormat(a, b) {
     if (!a || !b) return true;
+    if (isBlock(a) || isBlock(b)) return B.formatSig(a) === B.formatSig(b);
     return JSON.stringify(blockOf(a)) === JSON.stringify(blockOf(b))
       && JSON.stringify(normalize(runsOf(a))) === JSON.stringify(normalize(runsOf(b)));
   }
@@ -461,10 +474,11 @@
     const own = doc.querySelectorAll('[data-rd-block]');
     if (own.length) {
       return Array.from(own).map((el) => {
+        if (el.hasAttribute('data-rd-kind')) return B.fromData(el);
         const { text, runs } = parseInline(el);
         const b = blockOf({ type: el.dataset.type, align: el.dataset.align, indent: el.dataset.indent, lh: el.dataset.lh });
         return { text, runs, ...b };
-      });
+      }).filter(Boolean);
     }
     const blocks = [];
     let cur = null;
@@ -543,6 +557,7 @@
     let list = null;
     const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
     for (const p of paras) {
+      if (isBlock(p)) { close(); out.push(B.exportHTML(p, opts)); continue; }
       const b = blockOf(p);
       const type = b.type || 'p';
       const isList = type === 'ul' || type === 'ol';
@@ -587,7 +602,12 @@
   blockquote { margin: 0 0 0.85em; padding-left: 1em; border-left: 3px solid #d5d5da; color: #5f5f66; }
   ul, ol { margin: 0 0 0.85em; padding-left: 1.6em; }
   li { margin-bottom: 0.3em; }
-  @media (prefers-color-scheme: dark) { body { background: #1e1e20; color: #ececef; } blockquote { border-color: #44444a; color: #a7a7ae; } }
+  figure img { display: block; border-radius: 6px; }
+  figcaption { margin-top: 6px; font-size: 14px; line-height: 1.6; color: #6e6e73; text-align: center; }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 1em; font-size: 15px; line-height: 1.6; }
+  th, td { border: 1px solid #dcdcde; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #f3f3f2; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { body { background: #1e1e20; color: #ececef; } blockquote { border-color: #44444a; color: #a7a7ae; } th, td { border-color: #3a3a3e; } th { background: #29292c; } figcaption { color: #a7a7ae; } }
 </style>
 </head>
 <body>
@@ -621,12 +641,13 @@ ${bodyHTML(paras)}
     return out;
   }
 
-  /** Markdown 只保留它能表达的：标题、引用、列表、粗体、斜体、删除线。 */
+  /** Markdown 只保留它能表达的：标题、引用、列表、粗体、斜体、删除线、图片和简单表格。 */
   function toMarkdown(title, paras) {
     const nums = numbering(paras);
     const lines = [`# ${title || '无标题'}`];
     let prevList = false;
     for (const p of paras) {
+      if (isBlock(p)) { lines.push(`\n\n${B.toMarkdown(p)}`); prevList = false; continue; }
       if (!p.text.trim()) { prevList = false; continue; }
       const b = blockOf(p);
       const type = b.type || 'p';
@@ -667,16 +688,18 @@ ${bodyHTML(paras)}
     if (i2 < i1) i2 = i1;
     let blocks = paras.slice(i1, i2 + 1);
     if (blocks.length > 1 && !c.collapsed && c.endOffset === 0) blocks = blocks.slice(0, -1);
+    blocks = blocks.filter((p) => !isBlock(p));
+    if (!blocks.length) return null;
     const chars = [];
     if (!c.collapsed) {
-      blocks.forEach((p, k) => {
-        const s = k === 0 ? c.offset : 0;
+      blocks.forEach((p) => {
+        const s = p.id === c.pid ? c.offset : 0;
         const e = paras.indexOf(p) === i2 ? c.endOffset : p.text.length;
         for (const r of slice(runsOf(p), s, e)) chars.push({ r, p });
       });
     }
     if (!chars.length) {
-      const p = paras[i1];
+      const p = blocks[0];
       const a = { ...attrsAt(p, c.offset) };
       if (pending) for (const k of Object.keys(pending)) { if (pending[k]) a[k] = pending[k]; else delete a[k]; }
       chars.push({ r: { n: 1, ...a }, p });
@@ -728,6 +751,7 @@ ${bodyHTML(paras)}
     typeOf,
     defaultSize,
     lineHeight,
+    isBlock,
     clonePara,
     sanitize,
     retext,

@@ -146,6 +146,19 @@
         { ins: '希望你在这里过得开心', reason: '“工作愉快”是套话，换成更日常的说法。', tag: '语气' },
       ],
     },
+    // —— 阳台的一年 ——
+    '番茄开花之后，我每天早上起来的第一件事情，就是去阳台上面看看它有没有结果。': {
+      text: '番茄开花后，我每天起床第一件事，就是去阳台看看它结果了没有。',
+      notes: [
+        { del: '之后', reason: '“之后”在这里可以只留“后”。', tag: '赘词' },
+        { del: '早上起来的', reason: '“早上起来的第一件事情”压成“起床第一件事”。', tag: '赘词' },
+        { ins: '起床', reason: '“早上起来的第一件事情”压成“起床第一件事”。', tag: '赘词' },
+        { del: '情', reason: '“事情”在这里可以只留“事”。', tag: '赘词' },
+        { del: '上面', reason: '“阳台上面”只说“阳台”即可。', tag: '赘词' },
+        { del: '有没有结果', reason: '“结果了没有”把动作放在前面，读起来更口语。', tag: '语序' },
+        { ins: '结果了没有', reason: '“结果了没有”把动作放在前面，读起来更口语。', tag: '语序' },
+      ],
+    },
     // —— Keeping a Notebook ——
     'I started keeping a notebook last spring, mostly because I kept forgetting the small things that I really wanted to remember.': {
       text: 'I started keeping a notebook last spring because I kept forgetting the small things I wanted to remember.',
@@ -233,6 +246,75 @@
     return { text: paragraphText, notes: [], source: 'none' };
   }
 
+  /*
+   * 图片和表格的预置改法，只给示例文章用。模拟 AI 不识别图片内容：
+   * 图片只会按预置换成另一张示例图，或用本地规则精简图注；表格只按规则精简单元格文字，增删行列也只来自预置。
+   */
+  const BLOCK_PRESETS = {
+    'img:sample-balcony': (q) => {
+      q.img = { ...q.img, asset: 'sample-tomato', alt: '番茄的叶子和第一朵花', iw: 1200, ih: 800 };
+      q.text = '四月，番茄开了第一朵花';
+      return {
+        para: q,
+        notes: [
+          { on: 'img', reason: '示例预置：换成近景。模拟 AI 不识别图片内容。', tag: '图片' },
+          { del: '三月的阳台，三个花盆刚刚摆好', reason: '示例预置：图注跟着新图改。', tag: '图注' },
+        ],
+      };
+    },
+    'table:月份\t作物\t状态\t备注\n三月\t薄荷\t发芽\t我觉得长得非常非常慢\n四月\t番茄\t开花\t其实每天都要浇水\n五月\t罗勒\t收获\t摘了一把做青酱': (q) => {
+      const t = q.table;
+      if (!t.cols.includes('ts') || !t.rows.some((r) => r.id === 'r5')) return null;
+      const ruled = rulesForTable(q);
+      t.cols = t.cols.filter((c) => c !== 'ts');
+      for (const r of t.rows) delete r.cells.ts;
+      const at = t.rows.findIndex((r) => r.id === 'r5') + 1;
+      t.rows.splice(at, 0, { id: 'r6', cells: { tm: '六月', tp: '辣椒', tn: '刚移栽，还没开花' } });
+      return {
+        para: q,
+        notes: [
+          ...ruled,
+          { on: 'col:ts', reason: '示例预置：“状态”和“备注”说的是同一件事。', tag: '结构' },
+          { on: 'row:r6', reason: '示例预置：补上六月。', tag: '结构' },
+        ],
+      };
+    },
+  };
+
+  function rulesForTable(q) {
+    const notes = [];
+    for (const row of q.table.rows) {
+      for (const c of q.table.cols) {
+        const v = row.cells[c];
+        if (!v) continue;
+        const r = applyRules(v);
+        if (r.text !== v) { row.cells[c] = r.text; notes.push(...r.notes); }
+      }
+    }
+    return notes;
+  }
+
+  /** 改写一个图片或表格段落。返回 { para, notes, source }，para 是改后的整段。 */
+  async function reviseBlock(p, instruction, options = {}) {
+    const B = global.RedraftBlocks;
+    await delay(options.fast ? 30 : Math.min(1500, 700 + [...(p.text || '')].length * 6), options.signal);
+    const before = JSON.stringify(B.cloneBlock(p));
+    const preset = BLOCK_PRESETS[p.kind === 'img' ? `img:${p.img.asset}` : `table:${p.text}`];
+    const hit = preset && preset(B.cloneBlock(p));
+    if (hit) return { para: B.syncText(hit.para), notes: hit.notes, source: 'preset' };
+    const q = B.cloneBlock(p);
+    let notes = [];
+    if (p.kind === 'img') {
+      const r = applyRules(q.text);
+      q.text = r.text;
+      notes = r.notes;
+    } else {
+      notes = rulesForTable(q);
+      B.syncText(q);
+    }
+    return { para: q, notes, source: JSON.stringify(q) === before ? 'none' : 'rules' };
+  }
+
   /** 为一处修改找说明：优先匹配删去的文字，其次匹配新增的文字。 */
   function explain(hunk, notes) {
     const list = notes || [];
@@ -251,6 +333,7 @@
   global.RedraftMockAI = {
     INSTRUCTIONS,
     revise,
+    reviseBlock,
     explain,
     presetFor: (t) => PRESETS[t.trim()] || null,
   };
