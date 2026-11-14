@@ -1,0 +1,335 @@
+{
+  "reviewedAt": "2026-11-14",
+  "reviewedSourceHash": "ab8a4ec2a4e44d01dcb2f948583771f4cce069fd69eee6208a483a552d6db4ac",
+  "packageDependency": {
+    "from": "App",
+    "to": "RedraftCore",
+    "evidence": "project.yml 声明本地包依赖，RedraftApp.swift 导入 RedraftCore。窗口目前显示 Color.clear。"
+  },
+  "nodes": [
+    {
+      "id": "app",
+      "title": "应用入口",
+      "subtitle": "RedraftApp",
+      "layer": "app",
+      "status": "scaffold",
+      "summary": "SwiftUI 窗口与核心包已连接，当前窗口内容为空白。",
+      "files": [
+        "App/RedraftApp.swift",
+        "project.yml"
+      ],
+      "symbols": [
+        "RedraftApp"
+      ],
+      "done": [
+        "声明 @main 应用和 Redraft 窗口",
+        "通过本地包导入 RedraftCore"
+      ],
+      "next": [
+        "装配编辑界面与文章会话"
+      ],
+      "evidence": [
+        {
+          "file": "App/RedraftApp.swift",
+          "needle": "struct RedraftApp: App"
+        },
+        {
+          "file": "project.yml",
+          "needle": "      - package: RedraftCore"
+        }
+      ],
+      "definition": "创建应用窗口，装配编辑界面和运行所需的服务。"
+    },
+    {
+      "id": "editor",
+      "title": "编辑界面",
+      "subtitle": "SwiftUI · AppKit",
+      "layer": "app",
+      "status": "planned",
+      "summary": "提供正文输入、段落标记和版本对比交互，目前只有设计。",
+      "files": [],
+      "symbols": [],
+      "done": [],
+      "next": [
+        "接入 NSTextView 与中文输入",
+        "显示段落标记和 Diff",
+        "把编辑动作交给文章会话"
+      ],
+      "evidence": [
+        {
+          "file": "design.md",
+          "needle": "| macOS 应用 | 编辑界面 |"
+        }
+      ],
+      "definition": "承接正文输入与段落选择，展示稿件和修改差异。"
+    },
+    {
+      "id": "session",
+      "title": "文章会话",
+      "subtitle": "编辑与改稿协调",
+      "layer": "core",
+      "status": "planned",
+      "summary": "协调编辑、改稿、对比与保存，当前尚无会话类型。",
+      "files": [],
+      "symbols": [],
+      "done": [],
+      "next": [
+        "固定送审版本并收集改稿结果",
+        "协调核心接口",
+        "依次等待每篇文章的保存完成"
+      ],
+      "evidence": [
+        {
+          "file": "design.md",
+          "needle": "| RedraftCore | 文章会话 |"
+        }
+      ],
+      "definition": "协调一篇文章的编辑、AI 改稿、版本对比与保存。"
+    },
+    {
+      "id": "document",
+      "title": "文档与版本",
+      "subtitle": "ArticleEditing",
+      "layer": "core",
+      "status": "partial",
+      "summary": "稿件值类型、编辑协议与选区转换已存在，版本管理尚待实现。",
+      "files": [
+        "Packages/RedraftCore/Sources/RedraftCore/Editing.swift",
+        "Packages/RedraftCore/Tests/RedraftCoreTests/EditingTests.swift"
+      ],
+      "symbols": [
+        "Draft",
+        "TextEdit",
+        "EditSource",
+        "EditingError",
+        "ArticleEditing"
+      ],
+      "done": [
+        "定义稿件、修改与来源",
+        "实现 UTF-16 选区转换和完整字符边界校验",
+        "选区转换已有测试覆盖"
+      ],
+      "next": [
+        "实现版本生成、历史读取与快照恢复",
+        "实现整轮修改和过期版本校验",
+        "接入 Loro 文档与段落定位"
+      ],
+      "evidence": [
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/Editing.swift",
+          "needle": "public func range(forUTF16"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/Editing.swift",
+          "needle": "public protocol ArticleEditing"
+        },
+        {
+          "file": "Packages/RedraftCore/Tests/RedraftCoreTests/EditingTests.swift",
+          "needle": "final class EditingTests"
+        }
+      ],
+      "definition": "管理稿件、编辑选区和版本历史，支持修改与追溯。"
+    },
+    {
+      "id": "diff",
+      "title": "文本对比",
+      "subtitle": "TextDiffing",
+      "layer": "core",
+      "status": "interface",
+      "summary": "定义有序差异片段及比较协议，当前没有具体比较器。",
+      "files": [
+        "Packages/RedraftCore/Sources/RedraftCore/TextDiff.swift"
+      ],
+      "symbols": [
+        "DiffSegment",
+        "TextDiffing"
+      ],
+      "done": [
+        "定义保留、新增、删除和替换的结果类型",
+        "约定结果可还原两稿原始 UTF-8"
+      ],
+      "next": [
+        "实现段落对齐和句词比较",
+        "验证中文、标点及 Unicode 原文还原"
+      ],
+      "evidence": [
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/TextDiff.swift",
+          "needle": "public enum DiffSegment"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/TextDiff.swift",
+          "needle": "public protocol TextDiffing"
+        }
+      ],
+      "definition": "比较两份稿件，提供保留上下文的增删改结果。"
+    },
+    {
+      "id": "rewrite",
+      "title": "改稿接口",
+      "subtitle": "ParagraphRewriting",
+      "layer": "core",
+      "status": "interface",
+      "summary": "接收一个段落与改稿要求，异步返回完整的改写文本。",
+      "files": [
+        "Packages/RedraftCore/Sources/RedraftCore/ParagraphRewriting.swift"
+      ],
+      "symbols": [
+        "ParagraphRewriting"
+      ],
+      "done": [
+        "定义异步、可抛错的逐段改稿接口"
+      ],
+      "next": [
+        "由 AI 服务或固定结果适配器实现此协议"
+      ],
+      "evidence": [
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/ParagraphRewriting.swift",
+          "needle": "public protocol ParagraphRewriting"
+        }
+      ],
+      "definition": "约定段落改写的输入、输出及异步调用方式。"
+    },
+    {
+      "id": "storage",
+      "title": "存储接口",
+      "subtitle": "ArticleStorage",
+      "layer": "core",
+      "status": "interface",
+      "summary": "定义归档、读取和保存约定，当前没有磁盘存储实现。",
+      "files": [
+        "Packages/RedraftCore/Sources/RedraftCore/ArticleStorage.swift"
+      ],
+      "symbols": [
+        "ArticleArchive",
+        "ArticleStorage"
+      ],
+      "done": [
+        "定义包含文章 ID、快照和 Markdown 的归档",
+        "约定读取缺失与失败、保存失败的数据保证"
+      ],
+      "next": [
+        "由本地文章库实现存储协议",
+        "验证写入中断和重新打开后的历史"
+      ],
+      "evidence": [
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/ArticleStorage.swift",
+          "needle": "public struct ArticleArchive"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/ArticleStorage.swift",
+          "needle": "public protocol ArticleStorage"
+        }
+      ],
+      "definition": "约定文章归档的保存、读取与枚举。"
+    },
+    {
+      "id": "ai",
+      "title": "AI 改稿服务",
+      "subtitle": "模型适配器",
+      "layer": "adapters",
+      "status": "planned",
+      "summary": "按核心协议接入模型服务，当前尚无网络实现或 Mock。",
+      "files": [],
+      "symbols": [],
+      "done": [],
+      "next": [
+        "接入模型请求、响应和错误处理",
+        "通过 Keychain 保存密钥",
+        "提供可复现的改稿样例"
+      ],
+      "evidence": [
+        {
+          "file": "design.md",
+          "needle": "| macOS 应用 | AI 改稿服务 |"
+        }
+      ],
+      "definition": "实现改稿协议，将段落和改稿要求交给模型并返回结果。"
+    },
+    {
+      "id": "library",
+      "title": "本地文章库",
+      "subtitle": "磁盘适配器",
+      "layer": "adapters",
+      "status": "planned",
+      "summary": "保存完整文章归档，提供文章列表和恢复能力，目前只有设计。",
+      "files": [],
+      "symbols": [],
+      "done": [],
+      "next": [
+        "实现归档存储、枚举和读取",
+        "支持 Markdown 导出",
+        "验证重开文章与失败恢复"
+      ],
+      "evidence": [
+        {
+          "file": "design.md",
+          "needle": "| macOS 应用 | 本地文章库 |"
+        }
+      ],
+      "definition": "实现存储协议，管理本地文章文件、导出与恢复。"
+    }
+  ],
+  "edges": [
+    {
+      "from": "document",
+      "to": "storage",
+      "kind": "actual",
+      "label": "类型引用 ArticleArchive",
+      "evidence": {
+        "file": "Packages/RedraftCore/Sources/RedraftCore/Editing.swift",
+        "needle": "func archive() throws -> ArticleArchive"
+      }
+    },
+    {
+      "from": "app",
+      "to": "editor",
+      "kind": "planned",
+      "label": "装配界面"
+    },
+    {
+      "from": "editor",
+      "to": "session",
+      "kind": "planned",
+      "label": "编辑动作"
+    },
+    {
+      "from": "session",
+      "to": "document",
+      "kind": "planned",
+      "label": "编辑与版本"
+    },
+    {
+      "from": "session",
+      "to": "diff",
+      "kind": "planned",
+      "label": "比较稿件"
+    },
+    {
+      "from": "session",
+      "to": "rewrite",
+      "kind": "planned",
+      "label": "请求改稿"
+    },
+    {
+      "from": "session",
+      "to": "storage",
+      "kind": "planned",
+      "label": "保存与恢复"
+    },
+    {
+      "from": "ai",
+      "to": "rewrite",
+      "kind": "planned",
+      "label": "实现协议"
+    },
+    {
+      "from": "library",
+      "to": "storage",
+      "kind": "planned",
+      "label": "实现协议"
+    }
+  ]
+}

@@ -13,7 +13,10 @@ Redraft 是一款以版本对比为核心的本地 macOS 写作编辑器。当�
 | `make project` | 从 `project.yml` 生成 `Redraft.xcodeproj`，可用 Xcode 打开 |
 | `make build` | 生成工程并构建 Debug 版 App |
 | `make run` | 构建并打开 Redraft 窗口 |
+| `make architecture` | 更新可离线打开的架构页面 |
 | `make test` | 单独运行 RedraftCore 测试 |
 | `make lint` | 按随 Xcode 提供的 swift-format 默认规范检查全部 Swift 源码 |
 
-[技术设计](design.md) · [开发流程](devflow.md) · [开发日志](devlog/README.md)
+[架构视图](architecture.html) · [技术设计](design.md) · [开发流程](devflow.md) · [开发日志](devlog/README.md)
+
+架构视图依次展示模块定义、依赖关系与实现状态，点击模块可查看对应的源码依据。更新时先核对 `scripts/architecture.json` 中的状态与证据，再运行 `make architecture`。完成代码与设计核对后，用 `python3 scripts/update_architecture.py --source-hash` 获取基线，更新 `reviewedSourceHash` 和 `reviewedAt`。生成日期代表快照时间，状态核对日期代表人工审阅时间。

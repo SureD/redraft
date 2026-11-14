@@ -1,4 +1,4 @@
-.PHONY: build lint project run test
+.PHONY: architecture build lint project run test
 
 build: project
 	xcodebuild -project Redraft.xcodeproj -scheme Redraft -configuration Debug \
@@ -16,3 +16,6 @@ test:
 lint:
 	xcrun swift-format lint --strict --recursive App Packages/RedraftCore/Package.swift \
 		Packages/RedraftCore/Sources Packages/RedraftCore/Tests
+
+architecture:
+	python3 scripts/update_architecture.py
