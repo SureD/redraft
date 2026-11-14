@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Redraft · 架构</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f5f5f7; --surface: #fff; --subtle: #f5f5f7; --ink: #1d1d1f;
+  --secondary: #6e6e73; --line: #e5e5e9; --blue: #0071e3; --blue-tint: #eaf3ff;
+  --green: #26834a; --amber: #9b690f; --purple: #7650b6; --soft-shadow: 0 4px 18px #00000004;
+  --graph-line: #b1b8c4; --group: #f7f8fa; --code: #f8f9fb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark; --page: #161617; --surface: #212123; --subtle: #29292c;
+    --ink: #f5f5f7; --secondary: #a1a1a6; --line: #363639; --blue: #60a9ff;
+    --blue-tint: #20344f; --green: #6bc58b; --amber: #e1b15a; --purple: #bd9cef;
+    --graph-line: #656a75; --group: #252527; --code: #1c1c1e; --soft-shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif; font-size: 14px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+button, input, select { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+button { color: inherit; }
+button:disabled { cursor: default; }
+[hidden] { display: none !important; }
+h1, h2, h3, p { margin: 0; }
+button { border: 0; }
+.app { max-width: 1680px; margin: auto; padding: 36px 36px 24px; }
+.top { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.brand { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; color: var(--secondary); margin-bottom: 9px; }
+.brand-mark { width: 21px; height: 21px; border-radius: 6px; display: inline-grid; place-items: center; background: var(--ink); color: var(--surface); font-family: Georgia, serif; font-size: 17px; font-style: italic; }
+h1 { font-size: 30px; letter-spacing: -.7px; line-height: 1.2; font-weight: 650; }
+.snapshot { color: var(--secondary); font-size: 12px; text-align: right; padding-top: 5px; }
+.snapshot div + div { margin-top: 3px; }
+.branch { display: inline-block; max-width: 400px; overflow-wrap: anywhere; color: var(--ink); }
+.stale { margin: 0 0 18px; padding: 12px 16px; border-radius: 12px; background: color-mix(in srgb, var(--amber) 11%, var(--surface)); color: var(--ink); font-size: 13px; }
+.stale strong { color: var(--amber); margin-right: 10px; }
+.topbar { margin-top: 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 16px; }
+.segmented { display: inline-flex; align-items: center; gap: 3px; padding: 3px; border-radius: 9px; background: color-mix(in srgb, var(--secondary) 11%, transparent); }
+.segmented button { padding: 5px 17px; border-radius: 7px; background: transparent; color: var(--secondary); font-size: 13px; white-space: nowrap; }
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px #00000012; }
+.graph-control { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.search { width: 210px; height: 33px; padding: 5px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.search::placeholder { color: var(--secondary); }
+select { height: 33px; padding: 4px 28px 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 306px; align-items: start; gap: 18px; }
+.workspace { min-width: 0; }
+.layout.no-selection { grid-template-columns: minmax(0, 1fr); }
+.graph-panel, .inspector, .module-panel { border: 1px solid var(--line); background: var(--surface); border-radius: 16px; box-shadow: var(--soft-shadow); overflow: hidden; }
+.graph-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.package { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.package strong { font-weight: 600; }
+.package .arrow { color: var(--blue); }
+.package small { color: var(--secondary); font-size: 11px; }
+.edge-switch { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--secondary); cursor: pointer; }
+.edge-switch input { width: 28px; height: 16px; accent-color: var(--blue); }
+.graph-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+.board { min-width: 580px; height: 590px; position: relative; isolation: isolate; }
+.group { position: absolute; top: 24px; bottom: 23px; border-radius: 13px; background: var(--group); z-index: -2; }
+.group-app { left: 2%; width: 21%; }
+.group-core { left: 26%; width: 47%; }
+.group-adapters { left: 76%; width: 22%; }
+.group-label { position: absolute; top: 15px; left: 15px; color: var(--secondary); font-size: 11px; letter-spacing: .5px; font-weight: 600; }
+.links { position: absolute; width: 100%; height: 100%; top: 0; left: 0; overflow: visible; pointer-events: none; z-index: -1; }
+.link { fill: none; stroke: var(--graph-line); stroke-width: 1.5; }
+.link.planned { stroke-dasharray: 5 5; }
+.link.related { stroke: var(--blue); stroke-width: 1.8; }
+.link.muted { opacity: .65; }
+.node { position: absolute; width: 17.6%; min-height: 76px; padding: 13px 12px 12px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 11px; box-shadow: 0 2px 5px #00000003; transition: border-color .15s, box-shadow .15s, opacity .15s; }
+.node:hover { border-color: var(--blue); }
+.node[aria-pressed="true"] { border-color: var(--blue); box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 14%, transparent); background: color-mix(in srgb, var(--blue) 4%, var(--surface)); }
+.node.muted { opacity: 1; }
+.node .node-title { display: block; font-weight: 600; font-size: 13px; line-height: 1.3; }
+.node .node-subtitle { display: block; color: var(--secondary); font-size: 11px; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--secondary); white-space: nowrap; }
+.node .status { margin-top: 10px; }
+.status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.status.scaffold { color: var(--blue); }
+.status.partial { color: var(--amber); }
+.status.interface { color: var(--purple); }
+.status.implemented { color: var(--green); }
+.status.planned::before { background: transparent; border: 1px solid currentColor; }
+.empty-graph { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; color: var(--secondary); }
+.graph-footer { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 12px; min-height: 46px; border-top: 1px solid var(--line); padding: 11px 20px; color: var(--secondary); font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; }
+.legend span { display: flex; align-items: center; gap: 6px; }
+.line-sample { display: inline-block; width: 22px; border-top: 1.5px solid var(--graph-line); }
+.line-sample.dashed { border-top-style: dashed; }
+.inspector { position: sticky; top: 20px; }
+.inspector-head { padding: 22px 21px 20px; border-bottom: 1px solid var(--line); }
+.inspector .eyebrow { color: var(--secondary); font-size: 11px; margin-bottom: 8px; }
+.inspector h2 { font-size: 21px; letter-spacing: -.3px; font-weight: 600; margin-bottom: 8px; }
+.inspector p { color: var(--secondary); font-size: 12px; line-height: 1.75; margin-top: 12px; }
+.inspector-body { padding: 0 21px 20px; }
+.detail-section { margin-top: 20px; }
+.detail-section h3 { font-size: 12px; font-weight: 600; margin-bottom: 9px; }
+.detail-list { margin: 0; padding: 0 0 0 15px; color: var(--secondary); font-size: 12px; }
+.detail-list li + li { margin-top: 7px; }
+.file-button { padding: 7px 0; display: block; width: 100%; text-align: left; overflow-wrap: anywhere; font-size: 11px; line-height: 1.55; color: var(--blue); background: transparent; }
+.file-button:hover { text-decoration: underline; }
+.symbols { display: flex; gap: 5px; flex-wrap: wrap; }
+.symbols code { font-size: 11px; color: var(--secondary); background: var(--subtle); padding: 3px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.relation { padding: 7px 0; width: 100%; background: transparent; text-align: left; font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+.relation span { color: var(--blue); }
+.relation small { font-size: 11px; color: var(--secondary); }
+.source-evidence { width: 100%; padding: 9px 10px; background: var(--subtle); border-radius: 7px; text-align: left; margin-top: 6px; }
+.source-evidence b { display: block; font-size: 11px; font-weight: 500; color: var(--blue); overflow-wrap: anywhere; }
+.source-evidence span { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin-top: 4px; color: var(--secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.bottom { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; color: var(--secondary); margin-top: 17px; font-size: 11px; }
+.maintenance { max-width: 760px; }
+.maintenance summary { cursor: pointer; width: fit-content; }
+.maintenance p { margin-top: 8px; line-height: 1.7; }
+.maintenance code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11px; color: var(--ink); overflow-wrap: anywhere; }
+.fingerprint { font-variant-numeric: tabular-nums; }
+.scroll-hint { display: none; }
+dialog { width: min(900px, calc(100vw - 40px)); max-height: 84vh; border: 1px solid var(--line); border-radius: 16px; padding: 0; background: var(--surface); color: var(--ink); box-shadow: 0 20px 80px #00000030; }
+dialog::backdrop { background: #0000003d; backdrop-filter: blur(5px); }
+.source-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 22px; border-bottom: 1px solid var(--line); }
+.source-head h2 { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.close { background: var(--subtle); border-radius: 50%; flex: 0 0 29px; height: 29px; font-size: 20px; line-height: 1; }
+.source-lines { max-height: 66vh; overflow: auto; margin: 0; padding: 18px 15px 18px 55px; font: 12px/1.8 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); tab-size: 2; }
+.source-lines li { padding-left: 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.source-lines li::marker { color: var(--secondary); font-size: 10px; }
+.source-lines li.highlight { background: var(--blue-tint); border-radius: 3px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (min-width: 1550px) { .board { height: 640px; } .node { min-height: 82px; padding: 15px; } .node .node-title { font-size: 14px; } .node .node-subtitle { font-size: 11px; } }
+@media (max-width: 1180px) { .app { padding: 26px 22px; } .layout { grid-template-columns: minmax(0, 1fr) 278px; gap: 14px; } .inspector-head { padding: 20px 18px; } .inspector-body { padding: 0 18px 18px; } }
+@media (max-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr); } .inspector { position: static; } .inspector-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; } .board { min-width: 560px; } }
+@media (max-width: 600px) { .app { padding: 22px 14px; } h1 { font-size: 27px; } .top { flex-direction: column; gap: 14px; } .snapshot { text-align: left; padding: 0; } .topbar { align-items: stretch; } .graph-control { width: 100%; } .search { flex: 1; width: 130px; min-width: 0; } .graph-header { padding: 13px 15px; } .package small { display: none; } .board { height: 660px; min-width: 640px; } .scroll-hint { display: inline; } .node { min-height: 80px; } .graph-footer { padding: 11px 15px; } .inspector-body { display: block; } dialog { width: calc(100vw - 20px); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }
+
+.module-panel { padding: 8px 24px 24px; }
+.module-group { margin-top: 20px; }
+.module-group h2 { font-size: 12px; color: var(--secondary); font-weight: 600; margin: 0 0 8px 12px; }
+.module-row, .implementation-row { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(0, 2.1fr); align-items: start; gap: 20px; width: 100%; text-align: left; padding: 16px 12px; border-radius: 9px; background: transparent; }
+.module-row + .module-row, .implementation-row + .implementation-row { border-top: 1px solid var(--line); }
+.module-row:hover, .implementation-row:hover { background: var(--subtle); }
+.module-row[aria-pressed="true"], .implementation-row[aria-pressed="true"] { background: var(--blue-tint); }
+.module-name { display: block; font-size: 14px; font-weight: 600; }
+.module-symbol { display: block; font-size: 11px; color: var(--secondary); margin-top: 5px; overflow-wrap: anywhere; }
+.module-definition { font-size: 13px; color: var(--secondary); line-height: 1.8; }
+.implementation-row .status { margin-top: 6px; }
+.implementation-note { font-size: 13px; color: var(--secondary); line-height: 1.8; }
+.source-disclosure { margin-top: 22px; }
+.source-disclosure summary { color: var(--secondary); font-size: 12px; cursor: pointer; }
+.list-empty { color: var(--secondary); padding: 40px 12px; }
+.snapshot { white-space: nowrap; }
+@media (max-width: 600px) {
+  .segmented { width: 100%; }
+  .segmented button { flex: 1; padding: 7px 9px; }
+  .module-panel { padding: 6px 10px 18px; }
+  .module-row, .implementation-row { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 14px 12px; }
+  .inspector-body { display: block; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div><div class="brand"><span class="brand-mark" aria-hidden="true">r</span> Redraft</div><h1>架构</h1></div>
+    <div class="snapshot" id="review-date"></div>
+  </header>
+  <p class="stale" id="stale" hidden><strong>代码或设计已变化，模块状态待复核</strong>下面的模块状态保留上次核对结果，可打开源码查看当前内容。</p>
+  <div class="topbar">
+    <div class="segmented" aria-label="查看方式"><button type="button" id="definitions-tab" aria-pressed="true">模块定义</button><button type="button" id="graph-tab" aria-pressed="false">依赖关系</button><button type="button" id="implementation-tab" aria-pressed="false">实现状态</button></div>
+    <div class="graph-control" id="graph-controls"><label class="sr-only" for="search">搜索模块或符号</label><input class="search" id="search" type="search" placeholder="搜索模块或符号" autocomplete="off"><label class="sr-only" for="status-filter">按实现状态筛选</label><select id="status-filter" hidden><option value="all">所有状态</option><option value="scaffold">应用骨架</option><option value="partial">部分实现</option><option value="interface">接口已定义</option><option value="planned">待实现</option><option value="implemented">已实现</option></select></div>
+  </div>
+  <main class="layout">
+    <div class="workspace">
+      <section class="module-panel" id="definitions-panel" aria-label="模块定义"><div id="definition-list"></div><p class="list-empty" id="definitions-empty" hidden>没有匹配的模块</p></section>
+      <section class="module-panel" id="implementation-panel" aria-label="实现状态" hidden><div id="implementation-list"></div><p class="list-empty" id="implementation-empty" hidden>没有匹配的模块</p></section>
+      <section class="graph-panel" id="graph-panel" aria-label="模块依赖图" hidden>
+        <div class="graph-header"><div class="package"><strong id="package-from"></strong><span class="arrow">→</span><strong id="package-to"></strong><small>包依赖</small></div><label class="edge-switch"><input id="show-planned" type="checkbox" checked>显示设计依赖</label></div>
+        <div class="graph-scroll"><div class="board" id="board"><div class="group group-app"><span class="group-label">APP · 客户端</span></div><div class="group group-core"><span class="group-label">REDRAFT CORE · 核心</span></div><div class="group group-adapters"><span class="group-label">APP · 适配器</span></div><svg class="links" id="links" aria-hidden="true"></svg><div class="empty-graph" id="empty-graph" hidden>没有匹配的模块</div></div></div>
+        <div class="graph-footer"><div class="legend"><span><i class="line-sample" aria-hidden="true"></i>代码引用</span><span><i class="line-sample dashed" aria-hidden="true"></i>设计依赖</span></div><span class="scroll-hint">左右滑动查看完整架构</span><span>箭头指向被依赖模块</span></div>
+      </section>
+    </div>
+    <aside class="inspector" id="inspector" aria-label="模块详情"><div class="inspector-head"><div class="eyebrow" id="detail-layer"></div><h2 id="detail-title"></h2><div id="detail-status"></div><p id="detail-summary"></p></div><div class="inspector-body" id="detail-body"></div></aside>
+  </main>
+  <footer class="bottom"><details class="maintenance"><summary>更新这份架构快照</summary><p>在仓库根目录运行 <code>python3 scripts/update_architecture.py</code>，然后重新打开本页。源码快照随命令更新，模块状态与设计依赖由 <code>scripts/architecture.json</code> 维护。</p><p id="package-evidence"></p><p id="branch"></p><p id="snapshot-date"></p><p class="fingerprint" id="fingerprint"></p></details></footer>
+  <div class="sr-only" id="announcement" aria-live="polite"></div>
+</div>
+<dialog id="source-dialog" aria-labelledby="source-title"><div class="source-head"><h2 id="source-title"></h2><button type="button" class="close" id="close-source" aria-label="关闭源码">×</button></div><ol class="source-lines" id="source-lines"></ol></dialog>
+<script id="architecture-data" type="application/json">__ARCHITECTURE_DATA__</script>
+<script>
+(() => {
+  'use strict';
+  const data = JSON.parse(document.getElementById('architecture-data').textContent);
+  const $ = id => document.getElementById(id);
+  const state = { selected: data.nodes[0]?.id, view: 'definitions', query: '', status: 'all', planned: true };
+  const statusNames = { scaffold: '应用骨架', partial: '部分实现', interface: '接口已定义', planned: '待实现', implemented: '已实现' };
+  const layerNames = { app: 'App / 客户端', core: 'RedraftCore / 核心', adapters: 'App / 外部适配器' };
+  const nodeByID = new Map(data.nodes.map(node => [node.id, node]));
+  const positions = { app: [3.7, 13], editor: [3.7, 41], session: [28, 13], document: [28, 41], diff: [28, 73], rewrite: [52, 41], storage: [52, 73], ai: [78, 41], library: [78, 73] };
+  const nodeElements = new Map();
+  const svgNS = 'http://www.w3.org/2000/svg';
+
+  function element(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  }
+  function statusBadge(status) { return element('span', `status ${status}`, statusNames[status] || status); }
+  function isVisible(node) {
+    const searchable = [node.title, node.subtitle, node.definition, node.summary, ...(node.symbols || []), ...(node.files || [])].join(' ').toLowerCase();
+    return (state.status === 'all' || node.status === state.status) && searchable.includes(state.query);
+  }
+  function visibleEdges() {
+    return data.edges.filter(edge => (state.planned || edge.kind === 'actual') && nodeByID.has(edge.from) && nodeByID.has(edge.to) && isVisible(nodeByID.get(edge.from)) && isVisible(nodeByID.get(edge.to)));
+  }
+  function relatedIDs() {
+    const ids = new Set([state.selected]);
+    for (const edge of visibleEdges()) {
+      if (edge.from === state.selected) ids.add(edge.to);
+      if (edge.to === state.selected) ids.add(edge.from);
+    }
+    return ids;
+  }
+  function buildNodes() {
+    data.nodes.forEach((node, index) => {
+      const button = element('button', 'node');
+      button.type = 'button';
+      button.dataset.node = node.id;
+      const position = positions[node.id] || [3.7 + (index % 4) * 24, 13 + Math.floor(index / 4) * 28];
+      button.style.left = position[0] + '%';
+      button.style.top = position[1] + '%';
+      button.setAttribute('aria-label', `${node.title}，${statusNames[node.status] || node.status}`);
+      button.append(element('span', 'node-title', node.title), element('span', 'node-subtitle', node.subtitle || ''));
+      button.addEventListener('click', () => selectNode(node.id));
+      $('board').append(button);
+      nodeElements.set(node.id, button);
+    });
+  }
+  function anchor(nodeID, side) {
+    const el = nodeElements.get(nodeID);
+    const x = el.offsetLeft, y = el.offsetTop, w = el.offsetWidth, h = el.offsetHeight;
+    return { x: side === 'left' ? x : side === 'right' ? x + w : x + w / 2, y: side === 'top' ? y : side === 'bottom' ? y + h : y + h / 2 };
+  }
+  function edgePath(edge) {
+    const source = nodeElements.get(edge.from), target = nodeElements.get(edge.to);
+    const dx = target.offsetLeft - source.offsetLeft;
+    const dy = target.offsetTop - source.offsetTop;
+    if (edge.from === 'document' && edge.to === 'storage') {
+      const a = anchor(edge.from, 'bottom'), b = anchor(edge.to, 'left');
+      const routeY = a.y + Math.max(24, (b.y - a.y) * .49);
+      return `M ${a.x} ${a.y} V ${routeY} Q ${a.x} ${routeY + 10} ${a.x + 10} ${routeY + 10} H ${b.x - 22} Q ${b.x - 12} ${routeY + 10} ${b.x - 12} ${routeY + 20} V ${b.y - 10} Q ${b.x - 12} ${b.y} ${b.x - 2} ${b.y}`;
+    }
+    if (Math.abs(dx) < 20) {
+      const a = anchor(edge.from, dy >= 0 ? 'bottom' : 'top'), b = anchor(edge.to, dy >= 0 ? 'top' : 'bottom');
+      if (edge.from === 'session' && edge.to === 'diff') {
+        const outsideX = source.offsetLeft - 10;
+        return `M ${a.x} ${a.y} V ${a.y + 15} H ${outsideX} V ${b.y - 14} H ${b.x} V ${b.y - 2}`;
+      }
+      return `M ${a.x} ${a.y} L ${b.x} ${b.y + (dy >= 0 ? -2 : 2)}`;
+    }
+    const a = anchor(edge.from, dx > 0 ? 'right' : 'left'), b = anchor(edge.to, dx > 0 ? 'left' : 'right');
+    if (edge.from === 'session') {
+      const lane = source.offsetLeft + source.offsetWidth + (edge.to === 'storage' ? 13 : 25);
+      return `M ${a.x} ${a.y} H ${lane} V ${b.y} H ${b.x - 2}`;
+    }
+    if (Math.abs(dy) < 30) return `M ${a.x} ${a.y} L ${b.x + (dx > 0 ? -2 : 2)} ${b.y}`;
+    const midpoint = (a.x + b.x) / 2;
+    return `M ${a.x} ${a.y} C ${midpoint} ${a.y}, ${midpoint} ${b.y}, ${b.x} ${b.y}`;
+  }
+  function drawEdges() {
+    const svg = $('links');
+    svg.replaceChildren();
+    svg.setAttribute('viewBox', `0 0 ${$('board').clientWidth} ${$('board').clientHeight}`);
+    const defs = document.createElementNS(svgNS, 'defs');
+    for (const [id, color] of [['arrow-normal', 'var(--graph-line)'], ['arrow-selected', 'var(--blue)']]) {
+      const marker = document.createElementNS(svgNS, 'marker');
+      marker.setAttribute('id', id); marker.setAttribute('viewBox', '0 0 8 8'); marker.setAttribute('refX', '7'); marker.setAttribute('refY', '4'); marker.setAttribute('markerWidth', '5'); marker.setAttribute('markerHeight', '5'); marker.setAttribute('orient', 'auto');
+      const arrow = document.createElementNS(svgNS, 'path'); arrow.setAttribute('d', 'M 1 1 L 7 4 L 1 7'); arrow.setAttribute('fill', 'none'); arrow.setAttribute('stroke', color); arrow.setAttribute('stroke-width', '1.3'); marker.append(arrow); defs.append(marker);
+    }
+    svg.append(defs);
+    for (const edge of visibleEdges()) {
+      const selected = edge.from === state.selected || edge.to === state.selected;
+      const path = document.createElementNS(svgNS, 'path');
+      path.setAttribute('d', edgePath(edge));
+      path.setAttribute('class', `link ${edge.kind === 'planned' ? 'planned' : ''} ${selected ? 'related' : 'muted'}`);
+      path.setAttribute('marker-end', `url(#${selected ? 'arrow-selected' : 'arrow-normal'})`);
+      svg.append(path);
+    }
+  }
+  function renderGraph() {
+    const related = relatedIDs();
+    let visible = 0;
+    for (const node of data.nodes) {
+      const button = nodeElements.get(node.id);
+      button.hidden = !isVisible(node);
+      button.setAttribute('aria-pressed', String(node.id === state.selected));
+      button.classList.toggle('muted', !related.has(node.id));
+      if (!button.hidden) visible++;
+    }
+    $('empty-graph').hidden = visible > 0;
+    $('inspector').hidden = visible === 0;
+    document.querySelector('.layout').classList.toggle('no-selection', $('inspector').hidden);
+    if (state.view === 'graph') requestAnimationFrame(drawEdges);
+  }
+  function section(title) {
+    const div = element('section', 'detail-section'); div.append(element('h3', '', title)); return div;
+  }
+  function addList(parent, title, items) {
+    if (!items?.length) return;
+    const block = section(title), list = element('ul', 'detail-list');
+    items.forEach(item => list.append(element('li', '', item))); block.append(list); parent.append(block);
+  }
+  function showSource(file, line = 1) {
+    const source = data.sources[file];
+    if (typeof source !== 'string') return;
+    $('source-title').textContent = file;
+    $('source-lines').replaceChildren();
+    source.split('\n').forEach((text, index) => {
+      const item = element('li', index + 1 === line ? 'highlight' : '', text || ' ');
+      $('source-lines').append(item);
+    });
+    $('source-dialog').showModal();
+    requestAnimationFrame(() => $('source-lines').children[Math.max(0, line - 1)]?.scrollIntoView({ block: 'center' }));
+  }
+  function renderInspector() {
+    const node = nodeByID.get(state.selected);
+    if (!node) return;
+    $('detail-layer').textContent = layerNames[node.layer] || node.layer;
+    $('detail-title').textContent = node.title;
+    $('detail-status').replaceChildren(statusBadge(node.status));
+    $('detail-status').hidden = state.view !== 'implementation';
+    $('detail-summary').textContent = state.view === 'implementation' ? node.summary : node.definition;
+    const body = $('detail-body'); body.replaceChildren();
+    if (state.view === 'implementation') {
+      addList(body, '已具备', node.done);
+      addList(body, '待实现', node.next);
+    }
+    if (state.view === 'definitions' && node.symbols?.length) {
+      const block = section('接口与数据类型'), tags = element('div', 'symbols');
+      node.symbols.forEach(symbol => tags.append(element('code', '', symbol))); block.append(tags); body.append(block);
+    }
+    const relationships = data.edges.filter(edge => (state.planned || edge.kind === 'actual') && (edge.from === node.id || edge.to === node.id));
+    if (state.view === 'graph' && relationships.length) {
+      const block = section('依赖关系');
+      relationships.forEach(edge => {
+        const outgoing = edge.from === node.id, other = nodeByID.get(outgoing ? edge.to : edge.from);
+        if (!other) return;
+        const button = element('button', 'relation'); button.type = 'button';
+        button.append(element('span', '', `${outgoing ? '→' : '←'} ${other.title}`), element('small', '', `${edge.kind === 'actual' ? '代码引用' : '设计依赖'} · ${edge.label}`));
+        button.addEventListener('click', () => selectNode(other.id)); block.append(button);
+      });
+      body.append(block);
+    }
+    const sources = element('details', 'source-disclosure');
+    sources.append(element('summary', '', '查看设计与源码'));
+    if (node.evidence?.length) {
+      const block = section('依据');
+      node.evidence.forEach(evidence => {
+        const button = element('button', 'source-evidence'); button.type = 'button'; button.disabled = typeof data.sources[evidence.file] !== 'string';
+        button.append(element('b', '', `${evidence.file.split('/').pop()} · ${evidence.line || 1}`), element('span', '', evidence.text));
+        button.addEventListener('click', () => showSource(evidence.file, evidence.line || 1)); block.append(button);
+      });
+      sources.append(block);
+    }
+    if (node.files?.length) {
+      const block = section('相关文件');
+      node.files.forEach(file => {
+        const button = element('button', 'file-button', file); button.type = 'button'; button.disabled = typeof data.sources[file] !== 'string';
+        button.addEventListener('click', () => showSource(file)); block.append(button);
+      });
+      sources.append(block);
+    }
+    body.append(sources);
+  }
+  function selectNode(id) {
+    if (!nodeByID.has(id)) return;
+    if (!isVisible(nodeByID.get(id))) {
+      state.query = ''; state.status = 'all';
+      $('search').value = ''; $('status-filter').value = 'all';
+    }
+    state.selected = id;
+    renderGraph(); renderLists(); renderInspector();
+    $('announcement').textContent = `已选中${nodeByID.get(id).title}，${statusNames[nodeByID.get(id).status]}`;
+  }
+  function buildModuleLists() {
+    for (const [layer, label] of Object.entries(layerNames)) {
+      for (const view of ['definition', 'implementation']) {
+        const group = element('section', 'module-group');
+        group.dataset.layer = layer;
+        group.append(element('h2', '', label));
+        for (const node of data.nodes.filter(item => item.layer === layer)) {
+          const button = element('button', view === 'definition' ? 'module-row' : 'implementation-row');
+          button.type = 'button';
+          button.dataset.module = node.id;
+          const name = element('span');
+          name.append(element('span', 'module-name', node.title));
+          if (view === 'definition') name.append(element('span', 'module-symbol', node.subtitle));
+          else name.append(statusBadge(node.status));
+          button.append(name, element('span', view === 'definition' ? 'module-definition' : 'implementation-note', view === 'definition' ? node.definition : node.summary));
+          button.addEventListener('click', () => selectNode(node.id));
+          group.append(button);
+        }
+        $(view + '-list').append(group);
+      }
+    }
+  }
+  function renderLists() {
+    for (const button of document.querySelectorAll('[data-module]')) {
+      button.hidden = !isVisible(nodeByID.get(button.dataset.module));
+      button.setAttribute('aria-pressed', String(button.dataset.module === state.selected));
+    }
+    for (const group of document.querySelectorAll('.module-group')) {
+      group.hidden = !Array.from(group.querySelectorAll('[data-module]')).some(button => !button.hidden);
+    }
+    const empty = !data.nodes.some(isVisible);
+    $('definitions-empty').hidden = !empty;
+    $('implementation-empty').hidden = !empty;
+  }
+  function setView(view) {
+    state.view = view;
+    if (view !== 'implementation') {
+      state.status = 'all';
+      $('status-filter').value = 'all';
+    }
+    for (const name of ['definitions', 'graph', 'implementation']) {
+      $(name + '-panel').hidden = view !== name;
+      $(name + '-tab').setAttribute('aria-pressed', String(view === name));
+    }
+    $('status-filter').hidden = view !== 'implementation';
+    renderGraph(); renderLists(); renderInspector();
+  }
+  $('branch').textContent = `${data.meta.branch} · ${data.meta.commit}${data.meta.dirty ? ' · 含未提交修改' : ''}`;
+  $('review-date').textContent = `状态核对 ${data.meta.reviewedAt || '未记录'}`;
+  $('snapshot-date').textContent = `快照生成 ${new Date(data.meta.generatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', dateStyle: 'short', timeStyle: 'short' })}`;
+  $('stale').hidden = !data.meta.reviewStale;
+  $('package-from').textContent = data.packageDependency.from;
+  $('package-to').textContent = data.packageDependency.to;
+  $('package-evidence').textContent = `包依赖依据 · ${data.packageDependency.evidence}`;
+  $('fingerprint').textContent = `源码指纹 ${String(data.meta.sourceHash || '').slice(0, 12)}`;
+  $('graph-tab').addEventListener('click', () => setView('graph'));
+  $('definitions-tab').addEventListener('click', () => setView('definitions'));
+  $('implementation-tab').addEventListener('click', () => setView('implementation'));
+  $('show-planned').addEventListener('change', event => { state.planned = event.target.checked; renderGraph(); renderInspector(); });
+  function applyFilter() {
+    state.query = $('search').value.trim().toLowerCase(); state.status = $('status-filter').value;
+    const visible = data.nodes.filter(isVisible);
+    if (visible.length && !visible.some(node => node.id === state.selected)) state.selected = visible[0].id;
+    renderGraph(); renderLists(); renderInspector();
+    $('announcement').textContent = visible.length ? '已更新筛选结果' : '没有匹配的模块';
+  }
+  $('search').addEventListener('input', applyFilter);
+  $('status-filter').addEventListener('change', applyFilter);
+  $('close-source').addEventListener('click', () => $('source-dialog').close());
+  $('source-dialog').addEventListener('click', event => { if (event.target === $('source-dialog')) { const rect = $('source-dialog').getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) $('source-dialog').close(); } });
+  buildNodes(); buildModuleLists(); renderGraph(); renderLists(); renderInspector();
+  new ResizeObserver(() => { if (state.view === 'graph') requestAnimationFrame(drawEdges); }).observe($('board'));
+})();
+</script>
+</body>
+</html>
