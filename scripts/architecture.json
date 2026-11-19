@@ -1,0 +1,512 @@
+{
+  "reviewedAt": "2026-11-15",
+  "reviewedSourceHash": "6c171f6240f3fa42df8ce7af019cb1cfb8081e7d92a189e823431e97bf344992",
+  "packageDependency": {
+    "from": "App",
+    "to": "RedraftCore",
+    "evidence": "project.yml 声明本地包依赖；App 直接消费 Core 结构化文档、ArticleSession 与改稿协议。"
+  },
+  "nodes": [
+    {
+      "id": "app",
+      "title": "应用入口",
+      "subtitle": "RedraftApp",
+      "layer": "app",
+      "status": "implemented",
+      "summary": "SwiftUI 入口持有窗口 ViewModel，显式装配文章来源、改稿适配器与图片资源解析器。",
+      "files": [
+        "App/RedraftApp.swift",
+        "project.yml",
+        "App/Preview/DemoWorkspaceContentSource.swift",
+        "App/Preview/DemoImageResolver.swift"
+      ],
+      "symbols": [
+        "RedraftApp"
+      ],
+      "done": [
+        "创建原生工作区和应用菜单",
+        "以 @StateObject 管理窗口 ViewModel 生命周期",
+        "从入口注入演示文章源、改稿服务与插画资源，处理初始文档校验失败"
+      ],
+      "next": [
+        "用真实文章库与服务替换演示适配器"
+      ],
+      "evidence": [
+        {
+          "file": "App/RedraftApp.swift",
+          "needle": "struct RedraftApp: App"
+        },
+        {
+          "file": "project.yml",
+          "needle": "      - package: RedraftCore"
+        },
+        {
+          "file": "App/Preview/DemoWorkspaceContentSource.swift",
+          "needle": "struct DemoWorkspaceContentSource: WorkspaceContentSource"
+        }
+      ],
+      "definition": "创建应用窗口，装配编辑界面和运行所需的服务。"
+    },
+    {
+      "id": "editor",
+      "title": "编辑界面",
+      "subtitle": "SwiftUI · AppKit",
+      "layer": "app",
+      "status": "partial",
+      "summary": "原生图文表编辑与审阅界面读取 ViewModel 投影；语义富文本在平台边界转换，输入焦点限定到窗口。业务服务仍为占位。",
+      "files": [
+        "App/Editor/NativeRichText.swift",
+        "App/Editor/WritingView.swift",
+        "App/Editor/FormattingToolbar.swift",
+        "App/Workspace/WorkspaceView.swift",
+        "App/Review/ReviewView.swift",
+        "App/Review/HistoryView.swift",
+        "App/Review/InspectorView.swift",
+        "App/Shared/PaperTheme.swift",
+        "App/Editor/ImageImport.swift",
+        "App/Editor/DocumentImagePreview.swift",
+        "Tests/EditorInteractionTests.swift",
+        "Tests/NativeUISnapshots.swift",
+        "App/Editor/WritingKeyboardNavigation.swift",
+        "App/Platform/RichTextBridge.swift",
+        "App/Platform/EditorSession.swift"
+      ],
+      "symbols": [
+        "WritingView",
+        "NativeRichText",
+        "FormattingToolbar",
+        "ReviewView",
+        "HistoryView",
+        "InspectorView",
+        "NativeMaterial",
+        "RichTextBridge",
+        "EditorSession"
+      ],
+      "done": [
+        "原生 TextKit 2 富文本输入、图表编辑与Core语义模型转换",
+        "窗口级输入会话和显式标题语义，工具栏读取派生状态",
+        "文章库、标记、审阅取舍、历史快照、范例与来历展示",
+        "原生毛玻璃、深浅色与降低透明度适配",
+        "原生组字提交校验基准内容，冲突时恢复权威正文；连续输入立即推进基准"
+      ],
+      "next": [
+        "接入真实 Diff、逐句溯源与文档级撤销",
+        "接入跨块连续选区并验证系统输入法端到端操作"
+      ],
+      "evidence": [
+        {
+          "file": "App/Editor/NativeRichText.swift",
+          "needle": "struct NativeRichText: NSViewRepresentable"
+        },
+        {
+          "file": "App/Workspace/WorkspaceView.swift",
+          "needle": "struct WorkspaceView: View"
+        },
+        {
+          "file": "App/Shared/PaperTheme.swift",
+          "needle": "struct NativeMaterial: View"
+        },
+        {
+          "file": "App/Platform/RichTextBridge.swift",
+          "needle": "enum RichTextBridge {"
+        }
+      ],
+      "definition": "承接正文输入与段落选择，展示稿件和修改差异。"
+    },
+    {
+      "id": "workspace",
+      "title": "窗口状态与只读投影",
+      "subtitle": "WorkspaceViewModel · MVVM",
+      "layer": "app",
+      "status": "implemented",
+      "summary": "Store 持有文章会话集合和范例；ViewModel 观察同一会话并派生展示，WorkspaceState 只保存窗口交互状态。",
+      "files": [
+        "App/Models/WorkspaceState.swift",
+        "App/Models/WorkspaceStore.swift",
+        "App/Models/ArticleViewState.swift",
+        "App/Models/WorkspaceContentSource.swift",
+        "App/ViewModels/WorkspaceViewModel.swift",
+        "Tests/WorkspaceStateTests.swift",
+        "App/Models/RewriteExamplePresentation.swift"
+      ],
+      "symbols": [
+        "WorkspaceViewModel",
+        "WorkspaceStore",
+        "WorkspaceState",
+        "ArticleViewState",
+        "WorkspaceContentSource"
+      ],
+      "done": [
+        "文章会话集合和范例在Store中统一归属，正文不再复制进UI状态",
+        "只读文章投影、筛选和统计从会话派生；多个窗口可共享文档",
+        "文章来源通过协议注入，空源不自动填充示例",
+        "共享会话提交后校正各窗口失效的文章、选区、审阅与弹窗引用"
+      ],
+      "next": [
+        "装配真实文章库和保存恢复服务"
+      ],
+      "evidence": [
+        {
+          "file": "App/ViewModels/WorkspaceViewModel.swift",
+          "needle": "final class WorkspaceViewModel: ObservableObject"
+        },
+        {
+          "file": "App/Models/WorkspaceState.swift",
+          "needle": "struct WorkspaceState {"
+        },
+        {
+          "file": "App/Models/WorkspaceStore.swift",
+          "needle": "final class WorkspaceStore: ObservableObject"
+        },
+        {
+          "file": "App/Models/ArticleViewState.swift",
+          "needle": "struct ArticleViewState: Identifiable"
+        }
+      ],
+      "definition": "持有窗口交互状态，观察文档会话并计算 UI 所需的展示值。"
+    },
+    {
+      "id": "session",
+      "title": "文章会话",
+      "subtitle": "编辑与改稿协调",
+      "layer": "core",
+      "status": "partial",
+      "summary": "ArticleSession 是一篇文章的唯一修改入口，拥有文档、内存历史、改稿请求和审阅状态；真实定稿合成与持久化尚未实现。",
+      "files": [
+        "Packages/RedraftCore/Sources/RedraftCore/ArticleSession.swift",
+        "Packages/RedraftCore/Sources/RedraftCore/Review.swift"
+      ],
+      "symbols": [
+        "ArticleSession",
+        "ReviewState",
+        "ReviewRequest",
+        "ReviewBatch"
+      ],
+      "done": [
+        "校验并提交内存文档更新，产生版本身份",
+        "保存不可变历史快照并通知多个订阅者",
+        "按文章、基准版本和请求身份处理改稿与取消",
+        "在独立审阅会话中记录取舍，完成预览时正文保持原样"
+      ],
+      "next": [
+        "接入真实定稿合成、Diff与Loro文档实现",
+        "依次等待每篇文章保存完成并提供恢复行为"
+      ],
+      "evidence": [
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/ArticleSession.swift",
+          "needle": "public final class ArticleSession"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/Review.swift",
+          "needle": "public enum ReviewState"
+        }
+      ],
+      "definition": "协调一篇文章的编辑、AI 改稿、版本对比与保存。"
+    },
+    {
+      "id": "document",
+      "title": "文档与版本",
+      "subtitle": "Article · DocumentBlock · RichTextContent",
+      "layer": "core",
+      "status": "partial",
+      "summary": "统一结构化文档、语义富文本和版本快照，App与Core使用同一数据契约；Loro和磁盘快照编解码仍未接入。",
+      "files": [
+        "Packages/RedraftCore/Sources/RedraftCore/Document.swift",
+        "Packages/RedraftCore/Sources/RedraftCore/RichText.swift",
+        "Packages/RedraftCore/Sources/RedraftCore/Editing.swift",
+        "Packages/RedraftCore/Tests/RedraftCoreTests/EditingTests.swift"
+      ],
+      "symbols": [
+        "Article",
+        "DocumentBlock",
+        "BlockContent",
+        "RichTextContent",
+        "ArticleVersion",
+        "TextEdit",
+        "ArticleEditing"
+      ],
+      "done": [
+        "用带关联值的枚举表达文本、图片和表格，避免不匹配内容",
+        "显式记录段落语义和文字样式，Core不依赖AppKit",
+        "修改定位包含块ID，UTF-16范围明确相对于块内文本",
+        "校验文档身份、内容范围与表格行列身份；值语义隔离快照"
+      ],
+      "next": [
+        "接入Loro引擎与持久化快照恢复",
+        "实现整轮修改合成与跨版本段落定位"
+      ],
+      "evidence": [
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/Document.swift",
+          "needle": "public struct Article:"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/RichText.swift",
+          "needle": "public struct RichTextContent:"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/Editing.swift",
+          "needle": "public protocol ArticleEditing"
+        }
+      ],
+      "definition": "管理稿件、编辑选区和版本历史，支持修改与追溯。"
+    },
+    {
+      "id": "diff",
+      "title": "文本对比",
+      "subtitle": "TextDiffing",
+      "layer": "core",
+      "status": "interface",
+      "summary": "定义有序差异片段及比较协议，当前没有具体比较器。",
+      "files": [
+        "Packages/RedraftCore/Sources/RedraftCore/TextDiff.swift"
+      ],
+      "symbols": [
+        "DiffSegment",
+        "TextDiffing"
+      ],
+      "done": [
+        "定义保留、新增、删除和替换的结果类型",
+        "约定结果可还原两稿原始 UTF-8"
+      ],
+      "next": [
+        "实现段落对齐和句词比较",
+        "验证中文、标点及 Unicode 原文还原"
+      ],
+      "evidence": [
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/TextDiff.swift",
+          "needle": "public enum DiffSegment"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/TextDiff.swift",
+          "needle": "public protocol TextDiffing"
+        }
+      ],
+      "definition": "比较两份稿件，提供保留上下文的增删改结果。"
+    },
+    {
+      "id": "rewrite",
+      "title": "改稿接口",
+      "subtitle": "ReviewProviding · ParagraphRewriting",
+      "layer": "core",
+      "status": "interface",
+      "summary": "改稿请求携带文章基准快照，异步返回审阅建议；逐段改写协议保留作未来服务边界。",
+      "files": [
+        "Packages/RedraftCore/Sources/RedraftCore/ParagraphRewriting.swift",
+        "Packages/RedraftCore/Sources/RedraftCore/Review.swift"
+      ],
+      "symbols": [
+        "ParagraphRewriting",
+        "ReviewProviding",
+        "ReviewRequest",
+        "ReviewChange"
+      ],
+      "done": [
+        "定义异步可抛错的改稿接口和基准版本上下文",
+        "通过同一协议注入固定结果演示适配器"
+      ],
+      "next": [
+        "由真实AI适配器实现请求和错误处理"
+      ],
+      "evidence": [
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/ParagraphRewriting.swift",
+          "needle": "public protocol ParagraphRewriting"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/Review.swift",
+          "needle": "public protocol ReviewProviding"
+        }
+      ],
+      "definition": "约定带文章及版本上下文的改稿输入、建议结果和异步调用方式。"
+    },
+    {
+      "id": "storage",
+      "title": "存储接口",
+      "subtitle": "ArticleStorage",
+      "layer": "core",
+      "status": "interface",
+      "summary": "定义归档、读取和保存约定，当前没有磁盘存储实现。",
+      "files": [
+        "Packages/RedraftCore/Sources/RedraftCore/ArticleStorage.swift"
+      ],
+      "symbols": [
+        "ArticleArchive",
+        "ArticleStorage"
+      ],
+      "done": [
+        "定义包含文章ID、版本ID、快照和Markdown的归档，约定表示来自同一版本",
+        "约定读取缺失与失败、保存失败的数据保证"
+      ],
+      "next": [
+        "由本地文章库实现存储协议",
+        "验证写入中断和重新打开后的历史"
+      ],
+      "evidence": [
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/ArticleStorage.swift",
+          "needle": "public struct ArticleArchive"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/ArticleStorage.swift",
+          "needle": "public protocol ArticleStorage"
+        }
+      ],
+      "definition": "约定文章归档的保存、读取与枚举。"
+    },
+    {
+      "id": "ai",
+      "title": "AI 改稿服务",
+      "subtitle": "模型适配器",
+      "layer": "adapters",
+      "status": "planned",
+      "summary": "真实模型服务尚未实现；UI使用独立注入的固定示例适配器，不进行网络请求。",
+      "files": [],
+      "symbols": [],
+      "done": [],
+      "next": [
+        "接入模型请求、响应和错误处理",
+        "通过 Keychain 保存密钥",
+        "用真实服务替换应用入口的演示适配器"
+      ],
+      "evidence": [
+        {
+          "file": "design.md",
+          "needle": "| macOS 应用 | AI 改稿服务 |"
+        }
+      ],
+      "definition": "实现改稿协议，将段落和改稿要求交给模型并返回结果。"
+    },
+    {
+      "id": "library",
+      "title": "本地文章库",
+      "subtitle": "磁盘适配器",
+      "layer": "adapters",
+      "status": "planned",
+      "summary": "保存完整文章归档，提供文章列表和恢复能力，目前只有设计。",
+      "files": [],
+      "symbols": [],
+      "done": [],
+      "next": [
+        "实现归档存储、枚举和读取",
+        "支持 Markdown 导出",
+        "验证重开文章与失败恢复"
+      ],
+      "evidence": [
+        {
+          "file": "design.md",
+          "needle": "| macOS 应用 | 本地文章库 |"
+        }
+      ],
+      "definition": "实现存储协议，管理本地文章文件、导出与恢复。"
+    }
+  ],
+  "edges": [
+    {
+      "from": "document",
+      "to": "storage",
+      "kind": "actual",
+      "label": "类型引用 ArticleArchive",
+      "evidence": {
+        "file": "Packages/RedraftCore/Sources/RedraftCore/Editing.swift",
+        "needle": "func archive() throws -> ArticleArchive"
+      }
+    },
+    {
+      "from": "app",
+      "to": "editor",
+      "kind": "actual",
+      "label": "装配界面",
+      "evidence": {
+        "file": "App/RedraftApp.swift",
+        "needle": "WorkspaceView(model: model)"
+      }
+    },
+    {
+      "from": "workspace",
+      "to": "session",
+      "kind": "actual",
+      "label": "共享会话并观察变化",
+      "evidence": {
+        "file": "App/Models/WorkspaceStore.swift",
+        "needle": "document: item.document, versions: item.versions,"
+      }
+    },
+    {
+      "from": "session",
+      "to": "document",
+      "kind": "actual",
+      "label": "唯一文档修改入口",
+      "evidence": {
+        "file": "Packages/RedraftCore/Sources/RedraftCore/ArticleSession.swift",
+        "needle": "public private(set) var document: Article"
+      }
+    },
+    {
+      "from": "session",
+      "to": "diff",
+      "kind": "planned",
+      "label": "比较稿件"
+    },
+    {
+      "from": "session",
+      "to": "rewrite",
+      "kind": "actual",
+      "label": "带基准版本请求改稿",
+      "evidence": {
+        "file": "Packages/RedraftCore/Sources/RedraftCore/ArticleSession.swift",
+        "needle": "func beginReview(using provider:"
+      }
+    },
+    {
+      "from": "session",
+      "to": "storage",
+      "kind": "planned",
+      "label": "保存与恢复"
+    },
+    {
+      "from": "ai",
+      "to": "rewrite",
+      "kind": "planned",
+      "label": "实现协议"
+    },
+    {
+      "from": "library",
+      "to": "storage",
+      "kind": "planned",
+      "label": "实现协议"
+    },
+    {
+      "from": "app",
+      "to": "workspace",
+      "kind": "actual",
+      "label": "装配窗口ViewModel与数据源",
+      "evidence": {
+        "file": "App/RedraftApp.swift",
+        "needle": "@StateObject private var model"
+      }
+    },
+    {
+      "from": "editor",
+      "to": "workspace",
+      "kind": "actual",
+      "label": "读取状态并发送动作",
+      "evidence": {
+        "file": "App/Workspace/WorkspaceView.swift",
+        "needle": "@ObservedObject var model: WorkspaceViewModel"
+      }
+    },
+    {
+      "from": "app",
+      "to": "rewrite",
+      "kind": "actual",
+      "label": "注入演示服务适配器",
+      "evidence": {
+        "file": "App/Preview/DemoWorkspaceContentSource.swift",
+        "needle": "struct DemoReviewProvider: ReviewProviding"
+      }
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+.build/
+.swiftpm/
+/Redraft.xcodeproj/
+.DS_Store
