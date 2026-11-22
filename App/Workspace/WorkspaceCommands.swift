@@ -1,4 +1,3 @@
-import RedraftCore
 import SwiftUI
 
 struct WorkspaceCommands: Commands {
@@ -12,16 +11,12 @@ struct WorkspaceCommands: Commands {
       Button("关于 Redraft") { model.showSheet(.about) }
     }
     CommandMenu("工作区") {
-      Button("写作") { model.setMode(.writing) }.keyboardShortcut("1", modifiers: .command)
-      Button("审阅") { model.setMode(.review) }.keyboardShortcut("2", modifiers: .command)
-      Button("历史") { model.setMode(.history) }.keyboardShortcut("3", modifiers: .command)
-      Divider()
-      Button("切换文章库") { model.state.sidebarVisible.toggle() }
+      Button("文章库") { model.state.sidebarVisible.toggle() }
         .keyboardShortcut("s", modifiers: [.command, .control])
-      Button("切换检查器") { model.state.inspectorVisible.toggle() }
-        .keyboardShortcut("i", modifiers: [.command, .option])
+      Button("排版工具栏") { model.state.formattingVisible.toggle() }
+        .disabled(model.isEditorLocked)
       Divider()
-      Button("预览改稿 / 审阅") {
+      Button(model.currentArticle?.phase == .ready ? "阅读本轮批注" : "请 AI 批注") {
         if model.currentArticle?.phase == .ready {
           model.enterReview()
         } else {
@@ -29,7 +24,11 @@ struct WorkspaceCommands: Commands {
         }
       }
       .keyboardShortcut(.return, modifiers: .command)
-      .disabled(model.currentArticle == nil || model.currentArticle?.phase == .running)
+      .disabled(
+        model.state.section != .articles || model.state.sheet != nil
+          || !(model.canRequestAnnotations || model.currentArticle?.phase == .ready))
+      Button("段落轨迹", action: model.showProvenance)
+        .disabled(model.state.section != .articles || model.selectedBlock == nil)
     }
     CommandGroup(replacing: .help) {
       Button("快捷键") { model.showSheet(.shortcuts) }.keyboardShortcut("/", modifiers: .command)

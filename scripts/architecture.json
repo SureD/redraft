@@ -1,6 +1,6 @@
 {
-  "reviewedAt": "2026-11-15",
-  "reviewedSourceHash": "6c171f6240f3fa42df8ce7af019cb1cfb8081e7d92a189e823431e97bf344992",
+  "reviewedAt": "2026-11-22",
+  "reviewedSourceHash": "05e1e499741161441a461f929f78a17afe839744a6c8197eeabc034513864989",
   "packageDependency": {
     "from": "App",
     "to": "RedraftCore",
@@ -53,14 +53,14 @@
       "subtitle": "SwiftUI · AppKit",
       "layer": "app",
       "status": "partial",
-      "summary": "原生图文表编辑与审阅界面读取 ViewModel 投影；语义富文本在平台边界转换，输入焦点限定到窗口。业务服务仍为占位。",
+      "summary": "原生稿纸提供连续输入和按需展开的排版；批注在对应内容块旁打开，段落轨迹可回看本轮及先前各轮取舍。",
       "files": [
         "App/Editor/NativeRichText.swift",
         "App/Editor/WritingView.swift",
         "App/Editor/FormattingToolbar.swift",
         "App/Workspace/WorkspaceView.swift",
-        "App/Review/ReviewView.swift",
-        "App/Review/HistoryView.swift",
+        "App/Review/AnnotationPanel.swift",
+        "App/Review/BlockTrailPanel.swift",
         "App/Review/InspectorView.swift",
         "App/Shared/PaperTheme.swift",
         "App/Editor/ImageImport.swift",
@@ -69,14 +69,15 @@
         "Tests/NativeUISnapshots.swift",
         "App/Editor/WritingKeyboardNavigation.swift",
         "App/Platform/RichTextBridge.swift",
-        "App/Platform/EditorSession.swift"
+        "App/Platform/EditorSession.swift",
+        "App/Editor/FormattingCommands.swift"
       ],
       "symbols": [
         "WritingView",
         "NativeRichText",
         "FormattingToolbar",
-        "ReviewView",
-        "HistoryView",
+        "AnnotationPanel",
+        "BlockTrailPanel",
         "InspectorView",
         "NativeMaterial",
         "RichTextBridge",
@@ -85,7 +86,7 @@
       "done": [
         "原生 TextKit 2 富文本输入、图表编辑与Core语义模型转换",
         "窗口级输入会话和显式标题语义，工具栏读取派生状态",
-        "文章库、标记、审阅取舍、历史快照、范例与来历展示",
+        "空稿正文首焦点、段旁批注、宽窄窗口同屏阅读、成稿取舍与段落轨迹",
         "原生毛玻璃、深浅色与降低透明度适配",
         "原生组字提交校验基准内容，冲突时恢复权威正文；连续输入立即推进基准"
       ],
@@ -109,6 +110,10 @@
         {
           "file": "App/Platform/RichTextBridge.swift",
           "needle": "enum RichTextBridge {"
+        },
+        {
+          "file": "App/Review/BlockTrailPanel.swift",
+          "needle": "struct BlockTrailPanel: View"
         }
       ],
       "definition": "承接正文输入与段落选择，展示稿件和修改差异。"
@@ -171,25 +176,27 @@
       "subtitle": "编辑与改稿协调",
       "layer": "core",
       "status": "partial",
-      "summary": "ArticleSession 是一篇文章的唯一修改入口，拥有文档、内存历史、改稿请求和审阅状态；真实定稿合成与持久化尚未实现。",
+      "summary": "ArticleSession 持有当前文档、批注请求及逐轮轨迹。作者明确成稿时，校验基准并一次合成所选的图文表修改。",
       "files": [
         "Packages/RedraftCore/Sources/RedraftCore/ArticleSession.swift",
-        "Packages/RedraftCore/Sources/RedraftCore/Review.swift"
+        "Packages/RedraftCore/Sources/RedraftCore/Review.swift",
+        "Packages/RedraftCore/Sources/RedraftCore/AnnotationComposition.swift"
       ],
       "symbols": [
         "ArticleSession",
         "ReviewState",
         "ReviewRequest",
-        "ReviewBatch"
+        "ReviewBatch",
+        "AnnotationRound"
       ],
       "done": [
         "校验并提交内存文档更新，产生版本身份",
         "保存不可变历史快照并通知多个订阅者",
         "按文章、基准版本和请求身份处理改稿与取消",
-        "在独立审阅会话中记录取舍，完成预览时正文保持原样"
+        "读批注时保持原文，按作者选择原子合稿并保留每轮源稿、建议和结果"
       ],
       "next": [
-        "接入真实定稿合成、Diff与Loro文档实现",
+        "接入持久化、词级差异展示与 Loro 文档",
         "依次等待每篇文章保存完成并提供恢复行为"
       ],
       "evidence": [
@@ -200,6 +207,10 @@
         {
           "file": "Packages/RedraftCore/Sources/RedraftCore/Review.swift",
           "needle": "public enum ReviewState"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/ArticleSession.swift",
+          "needle": "public func finishReview(acceptRemaining:"
         }
       ],
       "definition": "协调一篇文章的编辑、AI 改稿、版本对比与保存。"
@@ -234,7 +245,7 @@
       ],
       "next": [
         "接入Loro引擎与持久化快照恢复",
-        "实现整轮修改合成与跨版本段落定位"
+        "在持久化版本之间恢复段落定位"
       ],
       "evidence": [
         {
@@ -305,7 +316,7 @@
       ],
       "done": [
         "定义异步可抛错的改稿接口和基准版本上下文",
-        "通过同一协议注入固定结果演示适配器"
+        "通过同一协议注入本地演示批注适配器"
       ],
       "next": [
         "由真实AI适配器实现请求和错误处理"
@@ -362,7 +373,7 @@
       "subtitle": "模型适配器",
       "layer": "adapters",
       "status": "planned",
-      "summary": "真实模型服务尚未实现；UI使用独立注入的固定示例适配器，不进行网络请求。",
+      "summary": "真实模型服务尚待接入，应用预览使用本地示例和措辞规则生成批注。",
       "files": [],
       "symbols": [],
       "done": [],

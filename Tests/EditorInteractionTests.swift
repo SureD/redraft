@@ -6,8 +6,9 @@ import UniformTypeIdentifiers
 @main
 struct EditorInteractionTests {
   @MainActor
-  static func main() async throws {
-    _ = NSApplication.shared
+  static func main() throws {
+    NSApplication.shared.setActivationPolicy(.prohibited)
+    try writeThroughNativePanel()
     try semanticBridgePreservesParagraphRoles()
     try editorSessionsStayIndependent()
     try nativeCommitRejectsStaleComposition()
@@ -19,8 +20,198 @@ struct EditorInteractionTests {
     try tableKeyboardNavigationRespectsTextBoundaries()
     try selectedBlockShortcutsRespectTextFocus()
     try imagePastePreservesRichText()
-    try await imageImportsKeepTheirOriginalTarget()
-    print("Editor interactions: 12 scenarios passed")
+    try imageImportsKeepTheirOriginalTarget()
+    print("Editor interactions: 13 scenarios passed")
+  }
+
+  @MainActor
+  private static func writeThroughNativePanel() throws {
+    let model = try TestSupport.model(articles: [])
+    let host = NSHostingView(rootView: WritingView(model: model))
+    host.sizingOptions = []
+    let window = OffscreenTestWindow(
+      contentRect: NSRect(x: -8000, y: -8000, width: 720, height: 600), styleMask: [.titled],
+      backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = host
+    window.makeKeyAndOrderFront(nil)
+    defer { window.close() }
+
+    func waitFor(_ message: @autoclosure () -> String, until ready: () -> Bool) throws {
+      for _ in 0..<100 {
+        host.layoutSubtreeIfNeeded()
+        while let event = NSApp.nextEvent(
+          matching: [.leftMouseDown, .leftMouseUp], until: .distantPast, inMode: .default,
+          dequeue: true)
+        {
+          window.sendEvent(event)
+        }
+        if ready() { return }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+      }
+      throw Failure(message: message())
+    }
+
+    func click(at location: NSPoint) {
+      // Queue mouse-up as well so controls using AppKit's tracking loop receive a complete click.
+      for (type, number) in [(NSEvent.EventType.leftMouseUp, 2), (.leftMouseDown, 1)] {
+        let event = NSEvent.mouseEvent(
+          with: type, location: location, modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+          context: nil, eventNumber: number, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0
+        )!
+        NSApp.postEvent(event, atStart: true)
+      }
+    }
+
+    model.newArticle()
+    try waitFor("A new sheet must be ready to type into the body") {
+      window.firstResponder is BlockTextView
+    }
+    let firstParagraph = window.firstResponder as! BlockTextView
+    try expect(
+      firstParagraph.string.isEmpty && model.currentArticle?.title == ""
+        && firstParagraph.blockID == model.currentArticle?.blocks.first?.id,
+      "The title and first paragraph both start empty")
+    firstParagraph.insertText("起笔", replacementRange: firstParagraph.selectedRange())
+    try expect(
+      model.selectedBlock?.plainText == "起笔", "Typing immediately edits the first paragraph")
+    firstParagraph.selectAll(nil)
+    firstParagraph.deleteBackward(nil)
+    func firstField(in view: NSView) -> NSTextField? {
+      if let field = view as? NSTextField, field.isEditable { return field }
+      return view.subviews.lazy.compactMap { firstField(in: $0) }.first
+    }
+    guard let titleField = firstField(in: host), window.makeFirstResponder(titleField) else {
+      throw Failure(message: "The open paper must contain an editable title")
+    }
+    try waitFor("The title must accept keyboard focus") {
+      (window.firstResponder as? NSTextView)?.isFieldEditor == true
+    }
+    let title = window.firstResponder as! NSTextView
+    try expect(title.string.isEmpty, "Start with a genuinely empty title")
+    try expectCaret(in: title, fontSize: 32)
+    title.insertText("原生写作", replacementRange: title.selectedRange())
+    try expectCaret(in: title, fontSize: 32)
+    title.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+    try waitFor("Return from the title must focus the first body paragraph") {
+      window.firstResponder is BlockTextView
+    }
+    let body = window.firstResponder as! BlockTextView
+    try expect(
+      model.currentArticle?.title == "原生写作" && body.string.isEmpty
+        && body.blockID == model.currentArticle?.blocks.first?.id,
+      "Return commits the title and leaves an empty body ready to type")
+
+    try expectCaret(in: body, fontSize: 17)
+    model.formatSelection(.size(32))
+    try expectCaret(in: body, fontSize: 32)
+    body.insertText("A", replacementRange: body.selectedRange())
+    body.insertNewline(nil)
+    try expectCaret(in: body, fontSize: 32)
+    body.setMarkedText(
+      "pin", selectedRange: NSRange(location: 3, length: 0), replacementRange: body.selectedRange())
+    try expect(
+      body.hasMarkedText() && model.selectedBlock?.plainText == "A\n",
+      "A composed syllable remains in the native buffer while the document contains only committed text"
+    )
+    model.beginReview()
+    try expect(
+      body.hasMarkedText() && model.currentArticle?.phase == .idle && !model.isEditorLocked,
+      "Requesting annotations while composing must leave the buffer and the draft editable")
+    model.dismissNotice()
+    body.insertText("拼", replacementRange: body.markedRange())
+    try expect(
+      model.selectedBlock?.plainText == "A\n拼", "Composition commits at the insertion point")
+    body.selectAll(nil)
+    body.deleteBackward(nil)
+    try expect(
+      body.string.isEmpty && model.selectedBlock?.plainText == "",
+      "Deleting all text must leave the same paragraph empty")
+    body.insertText("继续", replacementRange: body.selectedRange())
+    try expect(
+      model.selectedBlock?.plainText == "继续", "An empty paragraph accepts immediate typing")
+
+    let table = DocumentBlock(table: TableContent(rows: [["保留表格"]]))
+    model.insertBlock(table)
+    model.selectBlock(body.blockID)
+    click(at: NSPoint(x: host.bounds.midX, y: 35))
+    try waitFor("Continuing after a table must focus a new trailing paragraph") {
+      guard let editor = window.firstResponder as? BlockTextView,
+        let last = model.currentArticle?.blocks.last
+      else { return false }
+      return editor.blockID == last.id && last.kind == .text && editor !== body
+    }
+    let trailing = window.firstResponder as! BlockTextView
+    trailing.insertText("表后", replacementRange: trailing.selectedRange())
+    try expect(
+      model.currentArticle?.blocks.map(\.id) == [body.blockID!, table.id, trailing.blockID!]
+        && model.selectedBlock?.plainText == "表后",
+      "Continuing from an earlier selection appends after the last attachment")
+    trailing.setSelectedRange(NSRange(location: 0, length: 0))
+    click(at: NSPoint(x: host.bounds.midX, y: 35))
+    try waitFor("A second continuation must reuse the final paragraph at its end") {
+      trailing.selectedRange() == NSRange(location: 2, length: 0)
+        && window.firstResponder === trailing && model.currentArticle?.blocks.count == 3
+    }
+    trailing.insertNewline(nil)
+    model.formatSelection(.size(32))
+    trailing.insertText("A", replacementRange: trailing.selectedRange())
+    model.formatSelection(.size(17))
+    trailing.insertText("bb", replacementRange: trailing.selectedRange())
+    trailing.moveLeft(nil)
+    try expectCaret(in: trailing, fontSize: 17)
+    trailing.moveToEndOfDocument(nil)
+    let longPassage = String(repeating: "输入一行正文\n", count: 40)
+    trailing.insertText(longPassage, replacementRange: trailing.selectedRange())
+    trailing.insertNewline(nil)
+    var geometry = ""
+    try waitFor("The empty final line of a long paragraph must be fully visible: \(geometry)") {
+      let caret = trailing.firstRect(forCharacterRange: trailing.selectedRange(), actualRange: nil)
+      let editor = window.convertToScreen(trailing.convert(trailing.bounds, to: nil))
+      let viewport = window.convertToScreen(host.convert(host.bounds, to: nil))
+      let visible = viewport.intersection(editor).insetBy(dx: -1, dy: -1)
+      geometry = "caret \(caret), viewport \(viewport), editor \(editor)"
+      return editor.height > viewport.height && caret.height > 0 && visible.contains(caret)
+        && trailing.selectedRange() == NSRange(location: trailing.string.utf16.count, length: 0)
+    }
+
+    // Click beside a real read-only paragraph. The margin must stay outside the text view's hit area.
+    let annotated = try TestSupport.demoModel()
+    let pending = annotated.articles.first { $0.phase == .ready }!
+    let original = pending.blocks
+    annotated.selectArticle(pending.id)
+    let paper = NSHostingView(rootView: WritingView(model: annotated))
+    window.contentView = paper
+    let firstID = pending.changes[0].blockID
+    func firstTextBlock(in view: NSView) -> BlockTextView? {
+      if let editor = view as? BlockTextView, editor.blockID == firstID { return editor }
+      return view.subviews.lazy.compactMap { firstTextBlock(in: $0) }.first
+    }
+    try waitFor("The source paragraph must mount beside its annotation button") {
+      paper.layoutSubtreeIfNeeded()
+      return firstTextBlock(in: paper)?.bounds.width ?? 0 > 100
+    }
+    let source = firstTextBlock(in: paper)!
+    let sourceFrame = source.convert(source.bounds, to: nil)
+    click(at: NSPoint(x: sourceFrame.maxX + 25, y: sourceFrame.maxY - 12))
+    try waitFor("The paper margin should open the comments for its paragraph") {
+      annotated.state.inspectorVisible && annotated.currentChange?.blockID == firstID
+    }
+    try expect(
+      annotated.state.inspectorTab == .annotations && annotated.currentArticle?.blocks == original,
+      "Reading an annotation on the page preserves the source")
+
+  }
+
+  @MainActor
+  private static func expectCaret(in editor: NSTextView, fontSize: CGFloat) throws {
+    let rect = editor.firstRect(forCharacterRange: editor.selectedRange(), actualRange: nil)
+    let nativeHeight = NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: fontSize))
+    try expect(
+      abs(rect.height - nativeHeight) <= 2,
+      "Insertion point at \(fontSize) pt should match native height \(nativeHeight), got \(rect.height)"
+    )
   }
 
   @MainActor
@@ -379,7 +570,7 @@ struct EditorInteractionTests {
   }
 
   @MainActor
-  private static func imageImportsKeepTheirOriginalTarget() async throws {
+  private static func imageImportsKeepTheirOriginalTarget() throws {
     let data = try pngData()
     let model = try model(text: NSAttributedString(string: "first"))
     let originalArticleID = model.currentArticle!.id
@@ -402,12 +593,16 @@ struct EditorInteractionTests {
       model.currentArticle!.blocks.count == count && model.state.notice == "无法读取这张图片",
       "Invalid image bytes do not enter the document")
 
-    let provider = NSItemProvider(item: data as NSData, typeIdentifier: UTType.png.identifier)
+    let provider = NSItemProvider()
+    provider.registerDataRepresentation(for: .image, visibility: .all) { completion in
+      completion(data, nil)
+      return nil
+    }
     try expect(
       model.receiveImageDrop([provider], after: anchorID), "Image providers are accepted for drop")
     model.newArticle()
     model.importImageData(data, target: target)
-    try await Task.sleep(for: .milliseconds(200))
+    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
     try expect(
       model.currentArticle!.blocks.allSatisfy { $0.kind == .text }
         && model.articles.first(where: { $0.id == originalArticleID })!.blocks.count == count,

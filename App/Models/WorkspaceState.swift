@@ -1,9 +1,8 @@
 import Foundation
 
 enum WorkspaceSection: String, CaseIterable { case articles, examples }
-enum WorkspaceMode: String, CaseIterable { case writing, review, history }
-enum InspectorTab: String, CaseIterable { case marks, provenance }
-enum DiffLayout: String, CaseIterable { case inline, sideBySide }
+enum WritingEdge { case start, end }
+enum InspectorTab: String, CaseIterable { case marks, annotations, provenance }
 enum ArticlePhase: String { case idle, running, ready }
 enum ExampleFilter: String, CaseIterable {
   case all, accept, keep, rewrite
@@ -25,8 +24,8 @@ enum WorkspaceSheet: String, Identifiable {
 struct WorkspaceState {
   var selectedArticleID: UUID? = nil
   var section: WorkspaceSection = .articles
-  var mode: WorkspaceMode = .writing
-  var sidebarVisible: Bool = true
+  var sidebarVisible: Bool = false
+  var formattingVisible: Bool = false
   var inspectorVisible: Bool = false
   var inspectorTab: InspectorTab = .marks
   var articleQuery: String = ""
@@ -35,13 +34,9 @@ struct WorkspaceState {
   var selectedBlockID: UUID? = nil
   var selectedRange: NSRange = NSRange(location: 0, length: 0)
   var selectedChangeID: UUID? = nil
-  var historyFromID: UUID? = nil
-  var historyToID: UUID? = nil
-  var onlyChanges: Bool = false
-  var diffLayout: DiffLayout = .inline
   var sheet: WorkspaceSheet? = nil
   var notice: String? = nil
-  var dismissedReviewError: String? = nil
+  var dismissedAnnotationNotice: String? = nil
   var customInstruction: String = ""
   var rewriteText: String = ""
   var rewriteReason: String = ""

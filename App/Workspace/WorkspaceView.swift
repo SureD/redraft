@@ -7,23 +7,22 @@ struct WorkspaceView: View {
 
   var body: some View {
     GeometryReader { geometry in
-      let inlineSidebar = geometry.size.width >= 980
-      let inlineInspector = geometry.size.width >= 1180
+      let inlineSidebar = geometry.size.width >= 1100
       ZStack {
         HStack(spacing: 0) {
           if model.state.sidebarVisible && inlineSidebar {
-            ArticleSidebar(model: model).frame(width: 244)
+            ArticleSidebar(model: model).frame(width: 224)
             Divider()
           }
           VStack(spacing: 0) {
-            windowToolbar(width: geometry.size.width)
+            windowToolbar
             Divider()
             if model.state.section == .articles && model.currentArticle != nil {
-              if model.state.mode == .writing {
+              if model.state.formattingVisible && !model.isEditorLocked {
                 FormattingToolbar(model: model)
                 Divider()
               }
-              content
+              WritingView(model: model)
             } else if model.state.section == .examples {
               ExamplesView(model: model)
             } else {
@@ -37,9 +36,10 @@ struct WorkspaceView: View {
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .background(PaperTheme.paper)
-          if inspectorVisible && inlineInspector {
+          if inspectorVisible {
             Divider()
-            inspector
+            InspectorView(model: model)
+              .frame(width: geometry.size.width < 920 ? 280 : 316)
           }
         }
 
@@ -49,13 +49,6 @@ struct WorkspaceView: View {
             ArticleSidebar(model: model, dismissOnSelection: true).frame(width: 260)
               .shadow(color: .black.opacity(0.12), radius: 20, x: 5)
             Spacer(minLength: 0)
-          }
-        }
-        if inspectorVisible && !inlineInspector {
-          Color.black.opacity(0.12).onTapGesture { model.state.inspectorVisible = false }
-          HStack(spacing: 0) {
-            Spacer(minLength: 0)
-            inspector.shadow(color: .black.opacity(0.12), radius: 20, x: -5)
           }
         }
       }
@@ -80,8 +73,9 @@ struct WorkspaceView: View {
           .accessibilityElement(children: .combine)
         }
       }
-      .onAppear { adaptPanels(to: geometry.size.width) }
-      .onChange(of: geometry.size.width) { width in adaptPanels(to: width) }
+      .onChange(of: inlineSidebar) { inline in
+        if !inline { model.state.sidebarVisible = false }
+      }
     }
     .frame(minWidth: 780, minHeight: 532)
     .tint(PaperTheme.accent)
@@ -95,54 +89,34 @@ struct WorkspaceView: View {
     model.state.inspectorVisible && model.state.section == .articles && model.currentArticle != nil
   }
 
-  private func adaptPanels(to width: CGFloat) {
-    if width < 980 { model.state.sidebarVisible = false }
-    if width < 1180 { model.state.inspectorVisible = false }
-  }
-
-  private var inspector: some View {
-    InspectorView(model: model)
-      .frame(width: 302)
-      .frame(maxHeight: .infinity)
-      .background(NativeMaterial(material: .sidebar))
-  }
-
-  @ViewBuilder private var content: some View {
-    switch model.state.mode {
-    case .writing: WritingView(model: model)
-    case .review: ReviewView(model: model)
-    case .history: HistoryView(model: model)
-    }
-  }
-
-  private func windowToolbar(width: CGFloat) -> some View {
-    HStack(spacing: 12) {
+  private var windowToolbar: some View {
+    HStack(spacing: 10) {
       ToolbarIcon(
-        title: "切换文章库 · ⌃⌘S", symbol: "sidebar.left", selected: model.state.sidebarVisible
+        title: "文章库 · ⌃⌘S", symbol: "sidebar.left", selected: model.state.sidebarVisible
       ) {
         model.state.sidebarVisible.toggle()
-        if model.state.sidebarVisible && width < 1180 { model.state.inspectorVisible = false }
       }
+      ToolbarIcon(title: "新建文章 · ⌘N", symbol: "square.and.pencil", action: model.newArticle)
       Spacer(minLength: 0)
-      if model.state.section == .articles {
-        Picker("工作模式", selection: Binding(get: { model.state.mode }, set: model.setMode)) {
-          Text("写作").tag(WorkspaceMode.writing)
-          Text("审阅").tag(WorkspaceMode.review)
-          Text("历史").tag(WorkspaceMode.history)
+      if model.currentArticle != nil && model.state.section == .articles {
+        if !model.isEditorLocked {
+          ToolbarIcon(
+            title: "排版", symbol: "textformat", selected: model.state.formattingVisible
+          ) {
+            model.state.formattingVisible.toggle()
+          }
         }
-        .pickerStyle(.segmented).labelsHidden().frame(width: 204)
-        .disabled(model.currentArticle == nil)
-      } else {
-        Text("改写范例").font(.headline)
+        annotationAction
       }
-      Spacer(minLength: 0)
-      if model.state.section == .articles { primaryAction }
       Menu {
-        Button("导出 Markdown…") { model.showNotice("Markdown 导出将在后续版本提供") }
-          .disabled(model.currentArticle == nil)
-        Button("导出 HTML…") { model.showNotice("HTML 导出将在后续版本提供") }
-          .disabled(model.currentArticle == nil)
-        Divider()
+        if model.currentArticle != nil && model.state.section == .articles {
+          Button("批注范围") {
+            model.state.inspectorTab = .marks
+            model.state.inspectorVisible = true
+          }
+          Button("段落轨迹", action: model.showProvenance).disabled(model.selectedBlock == nil)
+          Divider()
+        }
         Button("字数统计") { model.showSheet(.statistics) }.disabled(model.currentArticle == nil)
         Button("快捷键") { model.showSheet(.shortcuts) }
         Button("关于 Redraft") { model.showSheet(.about) }
@@ -151,31 +125,40 @@ struct WorkspaceView: View {
       }
       .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 26).help("更多")
       .accessibilityLabel("更多")
-      ToolbarIcon(title: "切换检查器 · ⌘⌥I", symbol: "sidebar.right", selected: inspectorVisible) {
-        model.state.inspectorVisible.toggle()
-        if model.state.inspectorVisible && width < 1180 { model.state.sidebarVisible = false }
-      }.disabled(model.currentArticle == nil || model.state.section == .examples)
     }
     .padding(.horizontal, 16).frame(height: 52)
     .background(NativeMaterial(material: .headerView))
   }
 
-  @ViewBuilder private var primaryAction: some View {
-    if model.currentArticle?.phase == .running {
-      HStack(spacing: 8) {
-        ProgressView().controlSize(.small)
-        Button("取消", action: model.cancelReview).buttonStyle(.borderless)
+  @ViewBuilder private var annotationAction: some View {
+    if let article = model.currentArticle {
+      switch article.phase {
+      case .running:
+        HStack(spacing: 8) {
+          ProgressView().controlSize(.small).accessibilityLabel("正在批注")
+          Button("取消批注", action: model.cancelReview).buttonStyle(.borderless)
+        }
+      case .ready:
+        Button {
+          if inspectorVisible && model.state.inspectorTab == .annotations {
+            model.state.inspectorVisible = false
+          } else {
+            model.enterReview()
+          }
+        } label: {
+          Label("\(article.changes.count) 条批注", systemImage: "text.bubble")
+        }
+        .buttonStyle(.bordered)
+        .help("查看本轮批注 · ⌘↩")
+      case .idle:
+        if model.canRequestAnnotations {
+          Button(action: model.beginReview) {
+            Label("请 AI 批注", systemImage: "text.bubble")
+          }
+          .buttonStyle(.borderless)
+          .help(model.markedCount == 0 ? "为全文生成示例批注 · ⌘↩" : "为标记的内容生成示例批注 · ⌘↩")
+        }
       }
-    } else if model.state.mode == .review && model.currentArticle?.phase == .ready {
-      Button("完成", action: model.completeReview)
-        .buttonStyle(.borderedProminent).disabled(model.unresolvedCount > 0)
-        .help(model.unresolvedCount > 0 ? "请先完成每一处取舍" : "完成本轮审阅预览")
-    } else if model.currentArticle?.phase == .ready {
-      Button("审阅", action: model.enterReview).buttonStyle(.borderedProminent)
-    } else if model.state.mode == .writing && model.markedCount > 0 {
-      Button(action: model.beginReview) {
-        Label("改稿 \(model.markedCount)", systemImage: "sparkles")
-      }.buttonStyle(.borderedProminent).help("预览标记段落的示例改稿 · ⌘↩")
     }
   }
 }

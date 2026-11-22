@@ -21,14 +21,10 @@ struct FormattingToolbar: View {
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 3) {
           Menu {
-            Button("正文") { model.formatSelection(.heading(0)) }.keyboardShortcut(
-              "0", modifiers: [.command, .option])
-            Button("标题 1") { model.formatSelection(.heading(1)) }.keyboardShortcut(
-              "1", modifiers: [.command, .option])
-            Button("标题 2") { model.formatSelection(.heading(2)) }.keyboardShortcut(
-              "2", modifiers: [.command, .option])
-            Button("标题 3") { model.formatSelection(.heading(3)) }.keyboardShortcut(
-              "3", modifiers: [.command, .option])
+            Button("正文") { model.formatSelection(.heading(0)) }
+            Button("标题 1") { model.formatSelection(.heading(1)) }
+            Button("标题 2") { model.formatSelection(.heading(2)) }
+            Button("标题 3") { model.formatSelection(.heading(3)) }
             Divider()
             Button("引用") { model.formatSelection(.quote) }
           } label: {
@@ -60,22 +56,9 @@ struct FormattingToolbar: View {
           separator
 
           formatButton("bold", "粗体 ⌘B", command: .bold)
-            .keyboardShortcut("b")
-          formatButton(
-            "italic", "斜体 ⌘I",
-            command: .italic
-          )
-          .keyboardShortcut("i")
-          formatButton(
-            "underline", "下划线 ⌘U",
-            command: .underline
-          )
-          .keyboardShortcut("u")
-          formatButton(
-            "strikethrough", "删除线 ⇧⌘X",
-            command: .strikethrough
-          )
-          .keyboardShortcut("x", modifiers: [.command, .shift])
+          formatButton("italic", "斜体 ⌘I", command: .italic)
+          formatButton("underline", "下划线 ⌘U", command: .underline)
+          formatButton("strikethrough", "删除线 ⇧⌘X", command: .strikethrough)
           separator
 
           Menu {
@@ -102,13 +85,9 @@ struct FormattingToolbar: View {
 
           Menu {
             Button("左对齐") { model.formatSelection(.alignment(.left)) }
-              .keyboardShortcut("l", modifiers: [.command, .shift])
             Button("居中") { model.formatSelection(.alignment(.center)) }
-              .keyboardShortcut("e", modifiers: [.command, .shift])
             Button("右对齐") { model.formatSelection(.alignment(.right)) }
-              .keyboardShortcut("r", modifiers: [.command, .shift])
             Button("两端对齐") { model.formatSelection(.alignment(.justified)) }
-              .keyboardShortcut("j", modifiers: [.command, .shift])
           } label: {
             Image(systemName: "text.alignleft").frame(width: 23)
           }
@@ -122,13 +101,11 @@ struct FormattingToolbar: View {
           }
           .help("行距").accessibilityLabel("行距").disabled(!canFormat)
           formatButton("list.bullet", "项目符号 ⇧⌘8", command: .list(false))
-            .keyboardShortcut("8", modifiers: [.command, .shift])
           formatButton("list.number", "编号列表 ⇧⌘7", command: .list(true))
-            .keyboardShortcut("7", modifiers: [.command, .shift])
-          formatButton("decrease.indent", "减少缩进 ⌘[", command: .indent(-1)).keyboardShortcut("[")
-          formatButton("increase.indent", "增加缩进 ⌘]", command: .indent(1)).keyboardShortcut("]")
+          formatButton("decrease.indent", "减少缩进 ⌘[", command: .indent(-1))
+          formatButton("increase.indent", "增加缩进 ⌘]", command: .indent(1))
           separator
-          formatButton("eraser", "清除格式 ⌘\\", command: .clear).keyboardShortcut("\\")
+          formatButton("eraser", "清除格式 ⌘\\", command: .clear)
           Button {
             model.chooseImage()
           } label: {
@@ -158,7 +135,7 @@ struct FormattingToolbar: View {
       HStack(spacing: 10) {
         separator
         if model.isEditorLocked {
-          Image(systemName: "lock").foregroundStyle(PaperTheme.secondaryText).help("当前稿件已送审")
+          Image(systemName: "lock").foregroundStyle(PaperTheme.secondaryText).help("本轮批注使用这份原稿")
         } else {
           Menu {
             ForEach(["更简洁", "更具体", "更顺口", "语气更自然"], id: \.self) { instruction in
@@ -180,16 +157,14 @@ struct FormattingToolbar: View {
           .help("标记当前段落、图片或表格")
 
           Menu {
+            Button("插入段落") { model.insertBlock(DocumentBlock()) }
             Button("上移段落") { model.moveSelectedBlock(-1) }.disabled(
               model.state.selectedBlockID == nil)
             Button("下移段落") { model.moveSelectedBlock(1) }.disabled(
               model.state.selectedBlockID == nil)
             Divider()
-            Button("存为版本") { model.savePreviewVersion() }
-            Button("这句话的来历") {
-              model.state.inspectorTab = .provenance
-              model.state.inspectorVisible = true
-            }.disabled(model.state.selectedBlockID == nil)
+            Button("查看这段的轨迹", action: model.showProvenance)
+              .disabled(model.state.selectedBlockID == nil)
           } label: {
             Image(systemName: "ellipsis").frame(width: 22)
           }

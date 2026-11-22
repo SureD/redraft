@@ -17,12 +17,13 @@ struct NativeUISnapshots {
         .environment(\.documentImageResolver, DemoImageResolver()))
     host.sizingOptions = []
     host.autoresizingMask = [.width, .height]
-    let window = NSWindow(
+    let window = OffscreenTestWindow(
       contentRect: NSRect(x: -8000, y: -8000, width: 1220, height: 820),
       styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.contentView = host
-    window.orderFront(nil)
+    window.makeKeyAndOrderFront(nil)
+    defer { window.close() }
 
     func settle() {
       for _ in 0..<12 {
@@ -37,6 +38,8 @@ struct NativeUISnapshots {
       window.setContentSize(NSSize(width: width, height: 820))
       host.setFrameSize(NSSize(width: width, height: 820))
       settle()
+      precondition(
+        host.visibleRect.contains(host.bounds), "Every part of the test window must be drawable")
       guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
         fatalError("Cannot allocate snapshot for \(name)")
       }
@@ -48,53 +51,93 @@ struct NativeUISnapshots {
       print("Rendered \(name): \(Int(host.bounds.width)) × \(Int(host.bounds.height))")
     }
 
+    let balcony = model.articles.first { $0.title == "阳台的一年" }!
+    model.newArticle()
+    try capture("new-article-light")
+    guard let body = window.firstResponder as? BlockTextView, let blockID = body.blockID else {
+      fatalError("Opening a new draft must put the insertion point in its body")
+    }
+    precondition(body.isEditable && body.string.isEmpty)
+    precondition(!model.state.inspectorVisible && !model.state.formattingVisible)
+
+    let original = "院子里的薄荷长得非常非常慢。"
+    let revised = "院子里的薄荷长得非常慢。"
+    body.insertText(original, replacementRange: body.selectedRange())
+    precondition(model.currentArticle?.blocks.first?.plainText == original)
+    model.renameArticle("阳台手记")
+    precondition(model.canRequestAnnotations)
+    model.beginReview()
+    let deadline = Date().addingTimeInterval(3)
+    while model.currentArticle?.phase == .running && Date() < deadline {
+      RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+    }
+    try capture("draft-annotations-ready")
+    precondition(model.currentArticle?.phase == .ready)
+    precondition(!model.state.inspectorVisible, "Returning suggestions must not open a panel")
+    precondition(
+      body.string == original && model.currentArticle?.blocks.first?.plainText == original)
+
+    model.showAnnotations(for: blockID)
+    try capture("draft-reading")
+    guard let change = model.currentChange, change.blockID == blockID else {
+      fatalError("The block's note must open its own suggestion")
+    }
+    precondition(change.before == original && change.after == revised)
+    model.decide(.accept, changeID: change.id)
+    precondition(model.currentArticle?.blocks.first?.plainText == original)
+    model.completeReview()
+    model.dismissNotice()
+    model.selectBlock(blockID)
+    model.showProvenance()
+    try capture("block-trail-dark", dark: true)
+    guard let round = model.currentArticle?.rounds.last else {
+      fatalError("The accepted round must be available from the same paragraph")
+    }
+    precondition(model.currentArticle?.blocks.first?.plainText == revised)
+    precondition(round.source.blocks.first?.plainText == original)
+    precondition(round.result.blocks.first?.plainText == revised)
+    precondition(model.state.inspectorVisible && model.state.inspectorTab == .provenance)
+
+    model.selectArticle(balcony.id)
+    model.state.inspectorVisible = false
+    model.state.sidebarVisible = true
     try capture("writing-light")
     let textViews = descendants(of: host).compactMap { $0 as? BlockTextView }
     precondition(!textViews.isEmpty, "Writing must use native TextKit text views")
     precondition(
       textViews.allSatisfy { $0.textLayoutManager != nil }, "TextKit 2 must remain active")
-    precondition(textViews.allSatisfy { $0.bounds.width > 100 && $0.bounds.height >= 30 })
+    for view in textViews {
+      let textHeight = view.textLayoutManager!.usageBoundsForTextContainer.height
+      precondition(
+        view.bounds.width > 100 && textHeight > 0 && view.bounds.height >= floor(textHeight),
+        "Each paragraph must fit its laid-out text")
+    }
     let materials = descendants(of: host).compactMap { $0 as? NSVisualEffectView }
     precondition(!materials.isEmpty, "Chrome must contain native materials")
     precondition(materials.allSatisfy { $0.state == .followsWindowActiveState })
 
     model.selectBlock(model.currentArticle?.blocks.first(where: { $0.kind == .table })?.id)
+    model.state.formattingVisible = true
     try capture("writing-table-light")
-
-    model.state.inspectorVisible = true
-    model.selectBlock(model.currentArticle?.blocks.first?.id)
-    try capture("writing-inspector-light")
-    try capture("writing-dark", dark: true)
-
-    if let diary = model.articles.first(where: { $0.title == "写日记的第一百天" }) {
-      model.selectArticle(diary.id)
-      model.state.inspectorVisible = false
-      try capture("diary-light")
-    }
+    let diary = model.articles.first { $0.title == "写日记的第一百天" }!
+    model.selectArticle(diary.id)
+    try capture("diary-dark", dark: true)
 
     guard let pending = model.articles.first(where: { $0.phase == .ready }) else {
-      fatalError("Expected a review fixture")
+      fatalError("Expected an annotated letter in the article library")
     }
     model.selectArticle(pending.id)
-    model.enterReview()
-    try capture("review-light")
-    model.state.inspectorVisible = false
     model.state.sidebarVisible = false
-    model.state.diffLayout = .sideBySide
-    try capture("review-compact", width: 780)
-
-    model.state.sidebarVisible = true
-    model.state.inspectorVisible = true
-    model.setMode(.history)
-    try capture("history-dark", dark: true)
+    model.enterReview()
+    try capture("annotations-light")
+    try capture("annotations-compact", width: 780)
+    precondition(model.state.inspectorVisible && model.state.inspectorTab == .annotations)
+    let visibleParagraphs = descendants(of: host).compactMap { $0 as? BlockTextView }
+    precondition(visibleParagraphs.contains { $0.string == pending.blocks.first?.plainText })
     model.showExamples()
     try capture("examples-light")
-
     model.newArticle()
-    model.state.sidebarVisible = false
-    model.state.inspectorVisible = false
     try capture("new-article-compact", width: 780)
-    window.close()
     print("Native rendering checks passed")
   }
 

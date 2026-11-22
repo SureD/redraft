@@ -8,18 +8,21 @@ struct WorkspaceStateTests {
   @MainActor
   static func main() async throws {
     try articleSelectionAndDeletion()
+    try writingAtDocumentEdges()
     try unicodeSelectionAndMarking()
     try reviewDecisions()
+    try partialAndBulkAdoption()
     try examplesAndSnapshots()
     try sheetActionsStayScoped()
     try await mixedContentDecisionsStayIndependent()
     try await cancellationIsArticleScoped()
+    try await writingThroughAdoption()
     try await unknownTextDoesNotInventSuggestions()
     try injectedSourcesAndSharedOwnership()
     try await sharedReviewLifecycle()
     try sharedReferencesStayValid()
     try await injectedReviewResultsAndFailures()
-    print("Workspace UI state: 12 scenarios passed")
+    print("Workspace UI state: 15 scenarios passed")
   }
 
   @MainActor
@@ -38,14 +41,50 @@ struct WorkspaceStateTests {
     try expect(
       model.articles[0].blocks[0].text == original.blocks[0].text,
       "A stale editor callback must not mutate another article")
+    model.state.sidebarVisible = true
+    model.state.inspectorVisible = true
+    model.state.formattingVisible = true
     model.newArticle()
     let created = model.currentArticle!.id
+    try expect(
+      model.currentArticle?.title == "" && model.currentArticle?.displayTitle == "未命名文章"
+        && model.state.selectedBlockID == model.currentArticle?.blocks.first?.id,
+      "A new article must start in its empty body and use a fallback name only for display")
+    try expect(
+      !model.state.formattingVisible && !model.state.inspectorVisible && !model.state.sidebarVisible
+        && !model.canRequestAnnotations,
+      "Blank writing must have no open panels, formatting row, or annotation request")
+    model.state.articleQuery = "未命名"
+    try expect(model.filteredArticles.contains { $0.id == created }, "The list name is searchable")
     model.renameArticle("新的文章")
     try expect(model.currentArticle?.title == "新的文章", "New articles must accept edits")
     model.deleteArticle(created)
     try expect(
-      model.currentArticle != nil && model.currentArticle?.id != created,
+      model.currentArticle != nil && model.currentArticle?.id != created
+        && model.state.selectedBlockID == nil,
       "Deleting the selected article must leave a valid selection")
+  }
+
+  @MainActor
+  private static func writingAtDocumentEdges() throws {
+    let image = DocumentBlock(image: ImageContent(altText: "草图"))
+    let table = DocumentBlock(table: TableContent(rows: [["数据"]]))
+    let model = try TestSupport.model(articles: [Article(title: "", blocks: [image, table])])
+    model.selectBlock(image.id)
+    guard let end = model.writingBlock(at: .end), let start = model.writingBlock(at: .start) else {
+      throw TestFailure(message: "Both edges of an attachment-only document must accept typing")
+    }
+    let revision = model.currentArticle?.document.revisionID
+    try expect(
+      start.kind == .text && end.kind == .text
+        && model.currentArticle?.blocks == [start, image, table, end],
+      "Writing at an edge must leave existing attachments in order regardless of selection")
+    try expect(
+      model.writingBlock(at: .start)?.id == start.id && model.writingBlock(at: .end)?.id == end.id
+        && model.currentArticle?.document.revisionID == revision,
+      "Returning to an existing edge paragraph must reuse it without editing the article")
+    model.showExamples()
+    try expect(model.writingBlock(at: .end) == nil, "A locked article cannot be continued")
   }
 
   @MainActor
@@ -77,10 +116,10 @@ struct WorkspaceStateTests {
     model.selectArticle(model.articles.first(where: { $0.phase == .ready })!.id)
     let source = model.currentArticle!.blocks
     model.enterReview()
-    model.completeReview()
     try expect(
-      model.state.mode == .review && model.currentArticle?.phase == .ready,
-      "Unresolved review decisions must prevent completion")
+      model.state.section == .articles && model.state.inspectorTab == .annotations
+        && model.state.inspectorVisible && model.currentArticle?.blocks == source,
+      "Reading must open the annotations beside the original article")
     let changes = model.currentArticle!.changes
     model.decide(.accept, changeID: changes[0].id)
     model.decide(.keep, changeID: changes[1].id)
@@ -92,16 +131,46 @@ struct WorkspaceStateTests {
     model.state.rewriteReason = "更符合我的语气"
     model.submitRewrite()
     try expect(model.unresolvedCount == 0, "All three review choices must resolve a change")
+    try expect(
+      model.currentArticle?.blocks == source && model.currentArticle?.rounds.isEmpty == true,
+      "Choosing or rewriting a suggestion must leave the active draft unchanged")
     model.completeReview()
     try expect(
-      model.state.mode == .writing && model.currentArticle?.phase == .idle,
+      !model.state.inspectorVisible && !model.isEditorLocked,
       "Completing review must unlock writing")
+    let round = model.currentArticle!.rounds.last!
     try expect(
-      model.currentArticle?.blocks == source,
-      "UI preview must not pretend to run the unimplemented document merge")
+      round.source.blocks == source && round.result.blocks == model.currentArticle?.blocks
+        && round.result.blocks[0].plainText == changes[0].after
+        && round.result.blocks[1] == source[1]
+        && round.result.blocks[2].plainText == "这是我自己的表达。",
+      "The final draft and its trajectory must record the selected, kept and rewritten text")
     try expect(
       model.examples.contains { $0.after == "这是我自己的表达。" && $0.decision == .rewrite },
       "The chosen expression must appear in examples")
+  }
+
+  @MainActor
+  private static func partialAndBulkAdoption() throws {
+    for acceptRemaining in [false, true] {
+      let model = try TestSupport.demoModel()
+      model.selectArticle(model.articles.first(where: { $0.phase == .ready })!.id)
+      let changes = model.currentArticle!.changes
+      model.showAnnotations(for: changes[1].blockID)
+      try expect(
+        model.currentChange?.id == changes[1].id && model.selectedBlock?.id == changes[1].blockID,
+        "A paragraph annotation must target its own suggestion")
+      model.decide(.keep)
+      model.decide(.accept, changeID: changes[0].id)
+      model.completeReview(acceptRemaining: acceptRemaining)
+      let round = model.currentArticle!.rounds.last!
+      try expect(
+        round.result.blocks[0].plainText == changes[0].after
+          && round.result.blocks[1].plainText == changes[1].before
+          && round.result.blocks[2].plainText
+            == (acceptRemaining ? changes[2].after : changes[2].before),
+        "Finishing a round must preserve explicit decisions and apply only the requested defaults")
+    }
   }
 
   @MainActor
@@ -114,12 +183,6 @@ struct WorkspaceStateTests {
       originalDiary.map(\.plainText) == styledDiary.map(\.plainText)
         && originalDiary != styledDiary,
       "The diary must demonstrate formatting-only history without inventing text changes")
-    let versionCount = model.currentArticle!.versions.count
-    model.setMode(.history)
-    model.savePreviewVersion()
-    try expect(
-      model.currentArticle!.versions.count == versionCount + 1,
-      "Manual snapshots must work from history as well as writing")
     model.state.exampleFilter = .rewrite
     model.state.exampleQuery = "受潮"
     try expect(
@@ -128,7 +191,7 @@ struct WorkspaceStateTests {
     let example = model.filteredExamples[0]
     model.selectExample(example.id)
     try expect(
-      model.state.selectedArticleID == example.articleID && model.state.mode == .writing,
+      model.state.selectedArticleID == example.articleID && model.state.section == .articles,
       "An example must navigate back to its source article")
     try expect(
       model.selectedBlock?.plainText.contains(example.after) == true
@@ -224,10 +287,13 @@ struct WorkspaceStateTests {
       reviewModel.currentArticle?.changes.first { $0.id == column.id }?.decision == .keep
         && reviewModel.currentArticle?.changes.first { $0.id == row.id }?.decision == .accept,
       "Keeping a column must not undo the choice to accept a new row")
-    for change in reviewModel.currentArticle!.changes where change.decision == nil {
-      reviewModel.decide(.accept, changeID: change.id)
-    }
-    reviewModel.completeReview()
+    reviewModel.completeReview(acceptRemaining: true)
+    let finalTable = reviewModel.currentArticle!.blocks.first { $0.id == table.id }!.table!
+    try expect(
+      finalTable.rows.count == table.table!.rows.count + 1
+        && finalTable.columnIDs == table.table!.columnIDs
+        && finalTable.rows[1][3] == "长得很慢" && finalTable.rows[2][3] == "每天浇水",
+      "Applying the batch must compose cell and row edits while preserving the kept column")
     let imageExample = reviewModel.examples.first { $0.blockID == image.id }!
     reviewModel.selectExample(imageExample.id)
     try expect(
@@ -252,7 +318,7 @@ struct WorkspaceStateTests {
       model.articles.first { $0.id == second }?.phase == .idle,
       "Cancelling must affect only the selected article")
     try expect(
-      model.state.notice == "已取消，标记保持原样",
+      model.state.notice == "已取消本轮批注",
       "A background completion must not replace another article's notice")
     model.beginReview()
     model.deleteArticle(second)
@@ -260,6 +326,48 @@ struct WorkspaceStateTests {
     try expect(
       !model.articles.contains { $0.id == second },
       "A deleted article must not reappear when its pending request ends")
+    model.selectArticle(first)
+    model.enterReview()
+    let source = model.currentArticle!.document
+    model.decide(.accept)
+    model.cancelReview()
+    try expect(
+      !model.isEditorLocked && !model.state.inspectorVisible
+        && model.currentArticle?.document == source
+        && model.currentArticle?.rounds.isEmpty == true,
+      "Returning to the original from a ready batch must leave staged changes unapplied")
+  }
+
+  @MainActor
+  private static func writingThroughAdoption() async throws {
+    let model = try TestSupport.demoModel()
+    model.newArticle()
+    let paragraph = model.selectedBlock!
+    let draft = "院子里的薄荷长得非常非常慢。"
+    let adopted = "院子里的薄荷长得非常慢。"
+    model.updateBlockText(paragraph.id, text: NSAttributedString(string: draft))
+    try expect(
+      model.canRequestAnnotations && model.markedCount == 0 && !model.state.inspectorVisible,
+      "A writer can request annotations directly after ordinary typing")
+    model.beginReview()
+    for _ in 0..<100 where model.currentArticle?.phase == .running {
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    try expect(
+      model.currentArticle?.phase == .ready && !model.state.inspectorVisible
+        && model.selectedBlock?.plainText == draft,
+      "The demo response must keep the original text and not open a pane automatically")
+    model.showAnnotations(for: paragraph.id)
+    try expect(
+      model.currentChange?.after == adopted && model.currentChange?.explanation.isEmpty == false,
+      "Opening the paragraph note must present a suggestion and its explanation")
+    model.completeReview(acceptRemaining: true)
+    model.showProvenance()
+    try expect(
+      model.state.inspectorTab == .provenance && model.selectedBlock?.plainText == adopted
+        && model.currentArticle?.rounds.last?.source.blocks.first?.plainText == draft
+        && model.currentArticle?.rounds.last?.changes.first?.blockID == paragraph.id,
+      "The adopted draft must retain a paragraph-linked record of the original and AI suggestion")
   }
 
   @MainActor
@@ -267,12 +375,13 @@ struct WorkspaceStateTests {
     let model = try TestSupport.demoModel()
     model.newArticle()
     let block = model.currentArticle!.blocks[0]
-    model.updateBlockText(block.id, text: NSAttributedString(string: "这是一段新的文字。"))
+    model.updateBlockText(block.id, text: NSAttributedString(string: "今天去看海。"))
     model.markBlock(block.id, instruction: "更简洁")
     model.beginReview()
     try await Task.sleep(for: .milliseconds(1300))
     try expect(
-      model.currentArticle?.phase == .idle && model.currentArticle?.changes.isEmpty == true,
+      model.currentArticle?.phase == .idle && model.currentArticle?.changes.isEmpty == true
+        && model.canRequestAnnotations && model.notice == "本轮暂无批注",
       "Unknown text must not receive fabricated service results")
     try expect(model.markedCount == 1, "Unmatched previews must preserve the user's marks")
   }
@@ -298,8 +407,7 @@ struct WorkspaceStateTests {
     let subscription = second.objectWillChange.sink { secondNotifications += 1 }
     defer { subscription.cancel() }
     first.state.inspectorVisible = true
-    first.savePreviewVersion()
-    let snapshot = first.historyTo!
+    let snapshot = store.session(for: original.id)!.saveVersion(title: "初稿")
     let initialRevision = original.revisionID
     first.renameArticle("修改后的标题")
     first.updateBlockText(original.blocks[0].id, text: NSAttributedString(string: "新的正文"))
@@ -372,7 +480,7 @@ struct WorkspaceStateTests {
     first.deleteArticle(article.id)
     try expect(
       second.state.selectedArticleID == nil && second.state.selectedBlockID == nil
-        && second.state.sheet == nil && second.state.mode == .writing,
+        && second.state.sheet == nil && !second.state.inspectorVisible,
       "Removing an article must reconcile selection and sheets in all consumers")
 
     let reviewStore = try WorkspaceStore(seed: DemoWorkspaceContentSource().load())
@@ -384,18 +492,19 @@ struct WorkspaceStateTests {
     reviewer.enterReview()
     peer.enterReview()
     peer.startRewrite()
-    for change in ready.changes { reviewer.decide(.keep, changeID: change.id) }
-    reviewer.completeReview()
+    reviewer.completeReview(acceptRemaining: true)
     try expect(
-      peer.state.mode == .writing && peer.state.sheet == nil
-        && peer.state.selectedChangeID == nil && peer.state.rewriteText.isEmpty,
+      !peer.state.inspectorVisible && peer.state.sheet == nil && !peer.isEditorLocked
+        && peer.state.selectedChangeID == nil && peer.state.rewriteText.isEmpty
+        && peer.currentArticle?.rounds.count == 1
+        && peer.currentArticle?.blocks == reviewer.currentArticle?.blocks,
       "Finishing a shared review must dismiss another window's obsolete rewrite draft")
   }
 
   @MainActor
   private static func injectedReviewResultsAndFailures() async throws {
     let block = DocumentBlock(text: RichTextContent(string: "独立的测试输入"))
-    let document = Article(title: "接口测试", blocks: [block], marks: [block.id: "修改"])
+    let document = Article(title: "接口测试", blocks: [block])
     let source = TestSupport.Source(
       seed: WorkspaceSeed(articles: [ArticleSeed(document: document)]))
     let model = try WorkspaceViewModel(source: source, reviewProvider: InjectedReviewProvider())
@@ -404,8 +513,10 @@ struct WorkspaceStateTests {
       try await Task.sleep(for: .milliseconds(2))
     }
     try expect(
-      model.currentChange == nil && model.currentArticle?.changes.first?.after == "注入接口的结果",
-      "Review content must come from the injected provider, including non-demo articles")
+      model.currentChange == nil && !model.state.inspectorVisible
+        && model.currentArticle?.document == document
+        && model.currentArticle?.changes.first?.after == "注入接口的结果",
+      "An unmarked draft can request whole-article feedback without moving focus or changing text")
     let failure = try WorkspaceViewModel(source: source, reviewProvider: FailingReviewProvider())
     failure.beginReview()
     for _ in 0..<100 where failure.currentArticle?.phase == .running {

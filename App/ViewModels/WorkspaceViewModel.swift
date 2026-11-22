@@ -23,7 +23,6 @@ final class WorkspaceViewModel: ObservableObject {
     editorSession.objectWillChange.sink { [weak self] _ in
       self?.objectWillChange.send()
     }.store(in: &subscriptions)
-    resetHistorySelection()
   }
 
   convenience init(source: any WorkspaceContentSource, reviewProvider: any ReviewProviding) throws {
@@ -36,13 +35,15 @@ final class WorkspaceViewModel: ObservableObject {
   var currentArticle: ArticleViewState? { currentSession.map(ArticleViewState.init(session:)) }
 
   var notice: String? {
-    if let notice = state.notice { return notice }
-    if case .failed(let message) = currentSession?.review,
-      state.dismissedReviewError != message
-    {
-      return "改稿失败：\(message)"
+    state.notice ?? (state.dismissedAnnotationNotice == annotationNotice ? nil : annotationNotice)
+  }
+
+  private var annotationNotice: String? {
+    switch currentSession?.review {
+    case .noSuggestions: "本轮暂无批注"
+    case .failed(let message): "批注失败：\(message)"
+    default: nil
     }
-    return nil
   }
 
   var selectedBlock: DocumentBlock? {
@@ -56,7 +57,7 @@ final class WorkspaceViewModel: ObservableObject {
   var filteredArticles: [ArticleViewState] {
     let query = state.articleQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     return articles.filter {
-      query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)
+      query.isEmpty || $0.displayTitle.localizedCaseInsensitiveContains(query)
         || $0.blocks.contains { $0.plainText.localizedCaseInsensitiveContains(query) }
     }
   }
@@ -67,7 +68,7 @@ final class WorkspaceViewModel: ObservableObject {
       let matchesDecision =
         state.exampleFilter == .all
         || state.exampleFilter.rawValue == example.decision.rawValue
-      let title = articles.first { $0.id == example.articleID }?.title ?? ""
+      let title = articles.first { $0.id == example.articleID }?.displayTitle ?? ""
       return matchesDecision
         && (query.isEmpty
           || [example.before, example.after, example.reason, example.displayTag, title].contains {
@@ -77,60 +78,40 @@ final class WorkspaceViewModel: ObservableObject {
   }
 
   var isEditorLocked: Bool {
-    state.section != .articles || state.mode != .writing || currentArticle?.phase != .idle
+    state.section != .articles || currentArticle?.phase != .idle
+  }
+  var canRequestAnnotations: Bool {
+    !isEditorLocked && state.sheet == nil && currentSession?.document.canRequestAnnotations == true
   }
   var markedCount: Int { currentArticle?.marks.count ?? 0 }
   var unresolvedCount: Int { currentArticle?.changes.filter { $0.decision == nil }.count ?? 0 }
-  var historyFrom: ArticleVersion? {
-    currentArticle?.versions.first { $0.id == state.historyFromID }
-  }
-  var historyTo: ArticleVersion? {
-    currentArticle?.versions.first { $0.id == state.historyToID }
-  }
 
   func selectArticle(_ id: UUID) {
     guard articles.contains(where: { $0.id == id }) else { return }
     state.selectedArticleID = id
     state.section = .articles
-    state.mode = .writing
     clearSelection()
-    resetHistorySelection()
   }
 
   func newArticle() {
-    let article = Article(title: "未命名文章", blocks: [DocumentBlock(text: RichTextContent())])
+    let article = Article(title: "", blocks: [DocumentBlock()])
     do {
       try store.insert(article)
       state.articleQuery = ""
       selectArticle(article.id)
+      state.sidebarVisible = false
+      state.formattingVisible = false
+      selectBlock(article.blocks.first?.id)
     } catch { report(error) }
   }
 
   func deleteArticle(_ id: UUID) {
     store.delete(id)
-    if state.selectedArticleID == id {
-      state.selectedArticleID = articles.first?.id
-      state.mode = .writing
-      clearSelection()
-      resetHistorySelection()
-    }
   }
 
   func renameArticle(_ title: String) {
     guard !isEditorLocked else { return }
     mutateSelectedArticle { $0.title = title }
-  }
-
-  func setMode(_ mode: WorkspaceMode) {
-    guard currentArticle != nil else { return }
-    if mode == .review {
-      enterReview()
-      return
-    }
-    state.mode = mode
-    state.section = .articles
-    state.sheet = nil
-    if mode == .history { resetHistorySelectionIfNeeded() }
   }
 
   func showExamples() {
@@ -211,6 +192,26 @@ final class WorkspaceViewModel: ObservableObject {
     selectBlock(block.id)
   }
 
+  /// Resolve a writing position without changing the order of surrounding attachments.
+  func writingBlock(at edge: WritingEdge) -> DocumentBlock? {
+    guard !isEditorLocked, let session = currentSession else { return nil }
+    let blocks = session.document.blocks
+    if let block = edge == .start ? blocks.first : blocks.last, block.kind == .text {
+      return block
+    }
+    let paragraph = DocumentBlock()
+    do {
+      try session.updateDocument { article in
+        let index = edge == .start ? article.blocks.startIndex : article.blocks.endIndex
+        article.blocks.insert(paragraph, at: index)
+      }
+      return paragraph
+    } catch {
+      report(error)
+      return nil
+    }
+  }
+
   func deleteBlock(_ id: UUID) {
     guard !isEditorLocked, currentArticle?.blocks.contains(where: { $0.id == id }) == true else {
       return
@@ -248,47 +249,51 @@ final class WorkspaceViewModel: ObservableObject {
   }
 
   func beginReview() {
-    guard state.section == .articles, state.mode == .writing, state.sheet == nil else { return }
-    guard let session = currentSession, currentArticle?.phase == .idle,
-      !session.document.marks.isEmpty
-    else {
-      showNotice("先标记想修改的内容")
+    guard !editorSession.hasMarkedText else {
+      showNotice("先确认正在输入的文字，再请求批注")
       return
     }
+    guard canRequestAnnotations, let session = currentSession else { return }
     state.selectedChangeID = nil
     state.notice = nil
-    state.dismissedReviewError = nil
+    state.dismissedAnnotationNotice = nil
     do { try session.beginReview(using: reviewProvider) } catch { report(error) }
   }
 
   func cancelReview() {
-    guard let session = currentSession, currentArticle?.phase == .running else { return }
+    guard state.section == .articles, state.sheet == nil, let session = currentSession,
+      session.review.isRunning || session.review.isReady
+    else { return }
     session.cancelReview()
-    state.notice = "已取消，标记保持原样"
+    state.notice = "已取消本轮批注"
   }
 
   func enterReview() {
-    guard let article = currentArticle, article.phase == .ready, !article.changes.isEmpty else {
-      showNotice("先送审标记的内容，再开始审阅")
+    guard let article = currentArticle,
+      let change = currentChange ?? article.changes.first(where: {
+        $0.blockID == state.selectedBlockID
+      })
+        ?? article.changes.first
+    else { return }
+    selectChange(change.id)
+  }
+
+  func showAnnotations(for blockID: UUID) {
+    guard let change = currentArticle?.changes.first(where: { $0.blockID == blockID }) else {
       return
     }
-    state.section = .articles
-    state.mode = .review
-    state.sheet = nil
-    if let change = article.changes.first(where: { $0.decision == nil }) ?? article.changes.first {
-      selectChange(change.id)
-    }
-    state.inspectorVisible = true
+    selectChange(change.id)
   }
 
   func selectChange(_ id: UUID) {
-    guard state.section == .articles, state.mode == .review, state.sheet == nil,
+    guard state.section == .articles, state.sheet == nil,
       currentArticle?.phase == .ready
     else { return }
     guard let change = currentArticle?.changes.first(where: { $0.id == id }) else { return }
     state.selectedChangeID = id
-    state.selectedBlockID = change.blockID
-    state.selectedRange = NSRange(location: 0, length: 0)
+    selectBlock(change.blockID)
+    state.inspectorTab = .annotations
+    state.inspectorVisible = true
   }
 
   func decide(_ decision: ReviewDecision) {
@@ -308,8 +313,7 @@ final class WorkspaceViewModel: ObservableObject {
   }
 
   func startRewrite() {
-    guard state.section == .articles, state.mode == .review, state.sheet == nil,
-      currentArticle?.phase == .ready, let change = currentChange, change.kind == .text
+    guard canEditReview, let change = currentChange, change.kind == .text
     else { return }
     state.rewriteText = change.rewrittenText.isEmpty ? change.after : change.rewrittenText
     state.rewriteReason = change.reason
@@ -324,7 +328,7 @@ final class WorkspaceViewModel: ObservableObject {
   func cancelRewrite() { dismissSheet() }
 
   func submitRewrite() {
-    guard state.sheet == .rewrite, state.section == .articles, state.mode == .review,
+    guard state.sheet == .rewrite, state.section == .articles,
       currentArticle?.phase == .ready, let change = currentChange, change.kind == .text,
       !state.rewriteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { return }
@@ -335,18 +339,11 @@ final class WorkspaceViewModel: ObservableObject {
     } catch { report(error) }
   }
 
-  func completeReview() {
+  func completeReview(acceptRemaining: Bool = false) {
     guard canEditReview, let article = currentArticle, !article.changes.isEmpty else { return }
-    guard unresolvedCount == 0 else {
-      showNotice("还有 \(unresolvedCount) 处修改等待取舍")
-      return
-    }
     do {
-      try store.finishPreviewReview(articleID: article.id)
-      state.mode = .writing
-      state.selectedChangeID = nil
-      state.sheet = nil
-      showNotice("已完成本轮预览，正文保持原样")
+      try store.finishReview(articleID: article.id, acceptRemaining: acceptRemaining)
+      showNotice("本轮改稿已完成")
     } catch { report(error) }
   }
 
@@ -368,25 +365,9 @@ final class WorkspaceViewModel: ObservableObject {
   }
 
   func showProvenance() {
+    guard state.section == .articles, state.sheet == nil, currentArticle != nil else { return }
     state.inspectorTab = .provenance
     state.inspectorVisible = true
-  }
-
-  func savePreviewVersion() {
-    guard state.section == .articles, state.sheet == nil,
-      let session = currentSession, currentArticle?.phase == .idle
-    else { return }
-    _ = session.saveVersion(title: "手动快照 \(session.versions.count + 1)")
-    resetHistorySelection()
-    showNotice("已添加本次预览快照")
-  }
-
-  func saveVersion() { savePreviewVersion() }
-
-  func swapHistoryVersions() {
-    let from = state.historyFromID
-    state.historyFromID = state.historyToID
-    state.historyToID = from
   }
 
   func showSheet(_ sheet: WorkspaceSheet) {
@@ -429,45 +410,30 @@ final class WorkspaceViewModel: ObservableObject {
   func showNotice(_ message: String) { state.notice = message }
   func dismissNotice() {
     state.notice = nil
-    if case .failed(let message) = currentSession?.review { state.dismissedReviewError = message }
+    state.dismissedAnnotationNotice = annotationNotice
   }
 
   private func clearSelection() {
     editorSession.clear()
+    state.inspectorVisible = false
+    state.inspectorTab = .marks
     state.selectedBlockID = nil
     state.selectedRange = NSRange(location: 0, length: 0)
     state.selectedChangeID = nil
     state.sheet = nil
     state.notice = nil
-    state.dismissedReviewError = nil
+    state.dismissedAnnotationNotice = nil
     state.customInstruction = ""
     state.rewriteText = ""
     state.rewriteReason = ""
     state.imageDescription = ""
   }
 
-  private func resetHistorySelection() {
-    state.historyFromID = currentArticle?.versions.first?.id
-    state.historyToID = currentArticle?.versions.last?.id
-  }
-
-  private func resetHistorySelectionIfNeeded() {
-    let ids = Set(currentArticle?.versions.map(\.id) ?? [])
-    if state.historyFromID.map({ !ids.contains($0) }) ?? true {
-      state.historyFromID = currentArticle?.versions.first?.id
-    }
-    if state.historyToID.map({ !ids.contains($0) }) ?? true {
-      state.historyToID = currentArticle?.versions.last?.id
-    }
-  }
-
   /// Shared documents can change in another window while this window keeps its own selection.
   private func reconcileState() {
     guard let article = currentArticle else {
       state.selectedArticleID = articles.first?.id
-      state.mode = .writing
       clearSelection()
-      resetHistorySelection()
       return
     }
     if let id = state.selectedBlockID {
@@ -487,7 +453,10 @@ final class WorkspaceViewModel: ObservableObject {
       }
     }
     if article.phase != .ready {
-      if state.mode == .review { state.mode = .writing }
+      if state.inspectorTab == .annotations {
+        state.inspectorVisible = false
+        state.inspectorTab = .marks
+      }
       if state.selectedChangeID != nil { state.selectedChangeID = nil }
       if state.sheet == .rewrite {
         dismissSheet()
@@ -500,11 +469,11 @@ final class WorkspaceViewModel: ObservableObject {
       state.selectedChangeID = nil
       if state.sheet == .rewrite { dismissSheet() }
     }
-    resetHistorySelectionIfNeeded()
   }
 
   private var canEditReview: Bool {
-    state.section == .articles && state.mode == .review && state.sheet == nil
+    state.section == .articles && state.inspectorVisible && state.inspectorTab == .annotations
+      && state.sheet == nil
       && currentArticle?.phase == .ready
   }
 

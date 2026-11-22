@@ -120,11 +120,7 @@ private enum DemoContent {
     let letterReview = ReviewBatch(
       articleID: letter.id, baseRevisionID: letter.revisionID, changes: changes(for: letter))
     let letterVersions = [
-      version(for: letter, title: "送审稿 · 示例", date: date(10), blocks: letterBlocks),
-      version(
-        for: letter,
-        title: "改稿 · 示例", date: date(10).addingTimeInterval(60),
-        blocks: suggestedBlocks(for: letter)),
+      version(for: letter, title: "原稿", date: date(10), blocks: letterBlocks)
     ]
 
     let shopBlocks = [
@@ -187,7 +183,7 @@ private enum DemoContent {
 
   static func changes(for article: Article) -> [ReviewChange] {
     article.blocks.flatMap { block -> [ReviewChange] in
-      guard article.marks[block.id] != nil else { return [] }
+      guard article.marks.isEmpty || article.marks[block.id] != nil else { return [] }
       if block.image?.assetName == "sample-balcony" {
         var after = block
         after.image?.assetName = "sample-tomato"
@@ -238,41 +234,31 @@ private enum DemoContent {
             explanation: "表格结构 · 单独确认新增的六月记录。", beforeBlock: block, afterBlock: row),
         ]
       }
-      guard let after = textSuggestions[block.plainText] else { return [] }
-      var result = block
-      result.text = RichTextContent(
-        string: after, defaultStyle: block.text.defaultStyle,
-        paragraphStyle: block.text.paragraphStyle)
+      guard block.kind == .text, let suggestion = textSuggestion(for: block.text.string) else {
+        return []
+      }
       return [
         ReviewChange(
-          blockID: block.id, before: block.plainText, after: after,
-          explanation: "精简重复表达，让动作和画面更清楚。", beforeBlock: block, afterBlock: result)
+          blockID: block.id, before: block.text.string, after: suggestion.text,
+          explanation: suggestion.note, beforeBlock: block)
       ]
     }
   }
 
-  static func suggestedBlocks(for article: Article) -> [DocumentBlock] {
-    let suggestions = changes(for: article)
-    return article.blocks.map { block in
-      if article.marks[block.id] != nil, block.image?.assetName == "sample-balcony" {
-        var after = block
-        after.image?.assetName = "sample-tomato"
-        after.image?.caption = "四月，番茄开了第一朵花"
-        after.image?.altText = "番茄的叶子和第一朵花"
-        return after
+  private static func textSuggestion(for original: String) -> (text: String, note: String)? {
+    if let suggestion = textSuggestions[original] { return suggestion }
+    // Outside the sample articles, the offline provider only comments on a phrase it recognizes.
+    let phrases = [
+      ("非常非常", "非常", "连续两个「非常」把重音拉长了。想让语气轻一点，可以只留一个。"),
+      ("在我看来，我觉得", "我觉得", "开头连续表达了两次个人判断，留下一处就够了。"),
+      ("的原因是因为", "的原因是", "「原因」已经提示下文会作解释，这里可以省去「因为」。"),
+    ]
+    for (phrase, replacement, note) in phrases {
+      if let range = original.range(of: phrase) {
+        return (original.replacingCharacters(in: range, with: replacement), note)
       }
-      if article.marks[block.id] != nil, block.table?.rows == balconyTableRows {
-        var after = block
-        after.table?.rows = [
-          ["月份", "作物", "备注"], ["三月", "薄荷", "长得很慢"], ["四月", "番茄", "每天浇水"], ["五月", "罗勒", "摘了一把做青酱"],
-          ["六月", "辣椒", "刚移栽，还没开花"],
-        ]
-        after.table?.rowIDs.append(UUID())
-        after.table?.columnIDs.remove(at: 2)
-        return after
-      }
-      return suggestions.first(where: { $0.blockID == block.id })?.afterBlock ?? block
     }
+    return nil
   }
 
   private static func date(_ day: Int) -> Date {
@@ -323,19 +309,30 @@ private enum DemoContent {
     }
   }
 
-  private static let textSuggestions: [String: String] = [
-    "番茄开花之后，我每天早上起来的第一件事情，就是去阳台上面看看它有没有结果。": "番茄开花后，我每天起床第一件事，就是去阳台看看它结果了没有。",
+  private static let textSuggestions: [String: (text: String, note: String)] = [
+    "番茄开花之后，我每天早上起来的第一件事情，就是去阳台上面看看它有没有结果。":
+      ("番茄开花后，我每天起床第一件事，就是去阳台看看它结果了没有。", "「每天早上起来的第一件事情」读起来稍长，可以早点带出「去阳台看番茄」这个动作。"),
     "去年冬天，我发现自己已经记不清上个月都做过一些什么事情了。日子一天一天地过去，好像什么都没有留下来。我想给自己留一点证据，证明这些日子我真的认真活过。":
-      "去年冬天，我发现自己记不清上个月做过什么。日子一天天过去，好像什么都没留下。我想给自己留一点证据，证明这些日子我真的认真活过。",
+      (
+        "去年冬天，我发现自己记不清上个月做过什么。日子一天天过去，好像什么都没留下。我想给自己留一点证据，证明这些日子我真的认真活过。",
+        "「做过一些什么事情」可以收成「做过什么」，让后面那句「留一点证据」早点出现。"
+      ),
     "我发现我其实是一个非常非常容易被小事打动的人，比如楼下面包店每天早上七点准时飘出来的那种香味，还有地铁上一个陌生人很认真地给我让了座。":
-      "我发现自己很容易被小事打动：楼下面包店每天七点准时飘出的香味，地铁上一个陌生人认真地给我让座。",
-    "欢迎你加入我们团队！在接下来的几周里，你可能会收到非常多的信息，这是完全正常的事情，不用担心。": "欢迎加入我们！接下来几周，信息可能有点多，别担心，慢慢来。",
-    "第一周你不需要急着去写代码。我们更希望你先花一些时间去了解我们的产品是怎么被用户使用的，然后再去看代码。": "第一周不用急着写代码。先看看用户怎样使用我们的产品，再去读代码。",
-    "遇到不懂的问题，请随时在群里提问。在这里没有人会觉得你的问题很笨，我们每个人都是这样过来的。": "遇到不懂的，随时在群里问。这里没人会觉得你的问题很笨——我们都是这样过来的。",
-    "回家以后我把那张电影票夹回了诗集里面，我觉得它应该是属于那本书的。": "回家后，我把电影票夹回诗集。它本来就属于那本书。",
+      ("我发现自己很容易被小事打动：楼下面包店每天七点准时飘出的香味，地铁上一个陌生人认真地给我让座。", "面包香和让座已经很具体，可以把前面的「其实」「非常非常」收短。"),
+    "欢迎你加入我们团队！在接下来的几周里，你可能会收到非常多的信息，这是完全正常的事情，不用担心。":
+      ("欢迎加入我们！接下来几周，信息可能有点多，别担心，慢慢来。", "「这是完全正常的事情」稍显正式。试着换成你会当面对新同事说的话。"),
+    "第一周你不需要急着去写代码。我们更希望你先花一些时间去了解我们的产品是怎么被用户使用的，然后再去看代码。":
+      ("第一周不用急着写代码。先看看用户怎样使用我们的产品，再去读代码。", "用「用户」作主语，「先看用户、再读代码」的顺序会更清楚。"),
+    "遇到不懂的问题，请随时在群里提问。在这里没有人会觉得你的问题很笨，我们每个人都是这样过来的。":
+      ("遇到不懂的，随时在群里问。这里没人会觉得你的问题很笨——我们都是这样过来的。", "把「提问」换成「问」，读起来更像同事之间的邀请。"),
+    "回家以后我把那张电影票夹回了诗集里面，我觉得它应该是属于那本书的。":
+      ("回家后，我把电影票夹回诗集。我觉得它就该留在那本书里。", "可以在「诗集」后停一下，让夹回电影票的动作和随后的念头各占一句。"),
     "后来我又去过几次那家书店，老板还是不太说话，但是有一次他非常主动地给我推荐了一本书，我觉得这件事情让我非常开心。":
-      "后来又去了几次。老板话还是不多。有一天，他从柜台后递来一本书：“你可能会喜欢。”",
+      ("后来我又去过几次。老板话还是不多。有一回，他主动给我推荐了一本书，我很开心。", "老板主动推荐书的那一次值得单独成句，读者会留意到他的变化。"),
     "I started keeping a notebook last spring, mostly because I kept forgetting the small things that I really wanted to remember.":
-      "I started keeping a notebook last spring because I kept forgetting the small things I wanted to remember.",
+      (
+        "I started keeping a notebook last spring because I kept forgetting the small things I wanted to remember.",
+        "去掉「mostly」和「really」，试着直接写记笔记的原因。"
+      ),
   ]
 }

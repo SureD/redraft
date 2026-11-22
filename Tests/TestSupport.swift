@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import RedraftCore
 
 @MainActor
@@ -27,4 +27,12 @@ enum TestSupport {
 
 struct NoReviewProvider: ReviewProviding {
   func changes(for request: ReviewRequest) async throws -> [ReviewChange] { [] }
+}
+
+/// AppKit can constrain a window to its title bar when no physical display is available.
+/// Keep the test window offscreen at the requested size so TextKit lays out its visible paragraphs.
+final class OffscreenTestWindow: NSWindow {
+  override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+    frameRect
+  }
 }

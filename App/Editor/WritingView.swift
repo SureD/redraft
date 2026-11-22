@@ -6,95 +6,59 @@ import UniformTypeIdentifiers
 struct WritingView: View {
   @ObservedObject var model: WorkspaceViewModel
 
-  var body: some View {
-    ScrollViewReader { scroll in
-      ScrollView {
-        if let article = model.currentArticle {
-          VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 10) {
-              Text(
-                article.updatedAt.formatted(
-                  .dateTime.year().month().day().locale(Locale(identifier: "zh_CN")))
-              )
-              .font(.system(size: 12)).foregroundStyle(PaperTheme.secondaryText)
-              TextField(
-                "无标题",
-                text: Binding(
-                  get: { model.currentArticle?.title ?? "" },
-                  set: { title in
-                    model.mutateSelectedArticle { $0.title = title }
-                  })
-              )
-              .textFieldStyle(.plain).font(.system(size: 32, weight: .semibold))
-              .disabled(model.isEditorLocked)
-              .accessibilityLabel("文章标题")
-            }
-            .padding(.bottom, 8)
+  @State private var bodyFocus: (blockID: UUID, request: UUID)?
+  @State private var hoveredBlockID: UUID?
 
-            ForEach(article.blocks) { block in
-              HStack(alignment: .top, spacing: 14) {
-                RoundedRectangle(cornerRadius: 1)
-                  .fill(
-                    article.marks[block.id] == nil ? Color.clear : PaperTheme.accent.opacity(0.65)
-                  )
-                  .frame(width: 2)
-                  .accessibilityHidden(true)
-                blockView(block)
-                  .frame(maxWidth: .infinity, alignment: .leading)
-              }
-              .padding(.leading, -16)
-              .id(block.id)
-              .onDrop(of: [UTType.image.identifier, UTType.fileURL.identifier], isTargeted: nil) {
-                providers in
-                model.receiveImageDrop(providers, after: block.id)
-              }
-              .contextMenu {
-                Button("标记：更简洁") { model.markBlock(block.id, instruction: "更简洁") }
-                Button("标记：更具体") { model.markBlock(block.id, instruction: "更具体") }
-                if article.marks[block.id] != nil {
-                  Button("取消标记") { model.unmarkBlock(block.id) }
+  var body: some View {
+    GeometryReader { page in
+      ScrollViewReader { scroll in
+        ScrollView {
+          if let article = model.currentArticle {
+            VStack(spacing: 0) {
+              VStack(alignment: .leading, spacing: 12) {
+                WritingTitleField(model: model, articleID: article.id) {
+                  focusBody(at: .start)
                 }
-                Divider()
-                Button("这句话的来历") {
-                  model.selectBlock(block.id)
-                  model.state.inspectorTab = .provenance
-                  model.state.inspectorVisible = true
-                }
-                if article.blocks.count > 1 {
-                  Button("删除内容", role: .destructive) { model.deleteBlock(block.id) }
+                .padding(.horizontal, 44)
+                .padding(.bottom, 12)
+
+                ForEach(article.blocks) { block in
+                  paperBlock(block, article: article)
                 }
               }
+              .fixedSize(horizontal: false, vertical: true)
+              .frame(maxWidth: 734)
+              .padding(.horizontal, 12)
+              .padding(.top, 54)
+
+              Button {
+                focusBody(at: .end)
+              } label: {
+                Color.clear
+                  .frame(maxWidth: .infinity, minHeight: 80, maxHeight: .infinity)
+                  .contentShape(Rectangle())
+              }
+              .buttonStyle(.plain)
+              .accessibilityLabel("继续写作")
+              .disabled(model.isEditorLocked)
             }
-            Button {
-              model.insertBlock(
-                DocumentBlock()
-              )
-            } label: {
-              Label("继续写作", systemImage: "plus").font(.system(size: 12))
-            }
-            .buttonStyle(.plain).foregroundStyle(.tertiary)
-            .disabled(model.isEditorLocked)
-            .padding(.top, 8)
+            .frame(maxWidth: .infinity, minHeight: page.size.height, alignment: .top)
           }
-          .frame(maxWidth: 646)
-          .padding(.horizontal, 44)
-          .padding(.top, 42)
-          .padding(.bottom, 100)
-          .frame(maxWidth: .infinity)
         }
-      }
-      .onChange(of: model.state.selectedBlockID) { id in
-        guard let id else { return }
-        if let editor = NSApp.keyWindow?.firstResponder as? BlockTextView, editor.blockID == id {
-          return
+        .onChange(of: model.state.selectedBlockID) { id in
+          guard let id else { return }
+          if let editor = NSApp.keyWindow?.firstResponder as? BlockTextView, editor.blockID == id {
+            return
+          }
+          scroll.scrollTo(id)
         }
-        scroll.scrollTo(id)
-      }
-      .onAppear {
-        if let id = model.state.selectedBlockID { scroll.scrollTo(id) }
+        .onAppear {
+          if let id = model.state.selectedBlockID { scroll.scrollTo(id) }
+        }
       }
     }
     .id(model.state.selectedArticleID)
+    .onChange(of: model.state.selectedArticleID) { _ in bodyFocus = nil }
     .background(PaperTheme.paper)
     .background(WritingKeyboardNavigation(model: model).frame(width: 0, height: 0))
     .onDrop(of: [UTType.image.identifier, UTType.fileURL.identifier], isTargeted: nil) {
@@ -103,11 +67,104 @@ struct WritingView: View {
     }
   }
 
+  private func paperBlock(_ block: DocumentBlock, article: ArticleViewState) -> some View {
+    let count = article.changes.filter { $0.blockID == block.id }.count
+    let reading =
+      model.state.inspectorVisible && model.state.inspectorTab == .annotations
+      && model.currentChange?.blockID == block.id
+    return blockView(block)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .overlay(alignment: .leading) {
+        if reading || (article.marks[block.id] != nil && article.phase == .idle) {
+          Capsule()
+            .fill(PaperTheme.accent.opacity(reading ? 0.85 : 0.5))
+            .frame(width: 2)
+            .offset(x: -12)
+            .accessibilityHidden(true)
+        }
+      }
+      .padding(.horizontal, 44)
+      .overlay(alignment: .topTrailing) {
+        if count > 0 {
+          Button {
+            model.showAnnotations(for: block.id)
+          } label: {
+            HStack(spacing: 3) {
+              Image(systemName: reading ? "text.bubble.fill" : "text.bubble")
+              Text("\(count)").monospacedDigit()
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(reading ? PaperTheme.accent : PaperTheme.secondaryText)
+            .frame(width: 38, height: 24)
+            .background(reading ? PaperTheme.accent.opacity(0.09) : .clear, in: Capsule())
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .help("阅读这段的 \(count) 条批注")
+          .accessibilityLabel("阅读这段的 \(count) 条批注")
+        } else if (hoveredBlockID == block.id || model.state.selectedBlockID == block.id)
+          && article.rounds.contains(where: { $0.changes.contains { $0.blockID == block.id } })
+        {
+          Button {
+            model.selectBlock(block.id)
+            model.showProvenance()
+          } label: {
+            Image(systemName: "clock.arrow.circlepath")
+              .font(.system(size: 12)).foregroundStyle(.secondary)
+              .frame(width: 38, height: 24)
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain).help("查看这段的轨迹").accessibilityLabel("查看这段的轨迹")
+        }
+      }
+      .onHover { inside in
+        if inside {
+          hoveredBlockID = block.id
+        } else if hoveredBlockID == block.id {
+          hoveredBlockID = nil
+        }
+      }
+      .contextMenu {
+        if !model.isEditorLocked {
+          Button("标记为「更简洁」") { model.markBlock(block.id, instruction: "更简洁") }
+          Button("标记为「更具体」") { model.markBlock(block.id, instruction: "更具体") }
+          if article.marks[block.id] != nil {
+            Button("取消标记") { model.unmarkBlock(block.id) }
+          }
+          Divider()
+        }
+        if count > 0 {
+          Button("阅读这段的批注") { model.showAnnotations(for: block.id) }
+        }
+        Button("查看这段的轨迹") {
+          model.selectBlock(block.id)
+          model.showProvenance()
+        }
+        if !model.isEditorLocked && article.blocks.count > 1 {
+          Divider()
+          Button("删除内容", role: .destructive) { model.deleteBlock(block.id) }
+        }
+      }
+      .onDrop(of: [UTType.image.identifier, UTType.fileURL.identifier], isTargeted: nil) {
+        model.receiveImageDrop($0, after: block.id)
+      }
+      .id(block.id)
+  }
+
+  private func focusBody(at edge: WritingEdge) {
+    guard let block = model.writingBlock(at: edge) else { return }
+    let location = edge == .start ? 0 : block.text.string.utf16.count
+    model.updateSelection(blockID: block.id, range: NSRange(location: location, length: 0))
+    bodyFocus = (block.id, UUID())
+  }
+
   @ViewBuilder private func blockView(_ block: DocumentBlock) -> some View {
     switch block.kind {
     case .text:
       if let articleID = model.currentArticle?.id {
-        TextBlockEditor(model: model, block: block, articleID: articleID)
+        TextBlockEditor(
+          model: model, block: block, articleID: articleID,
+          focusRequest: bodyFocus?.blockID == block.id ? bodyFocus?.request : nil)
       }
     case .image: ImageBlockEditor(model: model, block: block)
     case .table: TableBlockEditor(model: model, block: block)
@@ -115,11 +172,47 @@ struct WritingView: View {
   }
 }
 
+private struct WritingTitleField: View {
+  @ObservedObject var model: WorkspaceViewModel
+  let articleID: UUID
+  var enterBody: () -> Void
+  @FocusState private var focused: Bool
+
+  var body: some View {
+    Group {
+      if model.isEditorLocked {
+        Text(model.currentArticle?.title ?? "")
+          .frame(minHeight: 38, alignment: .leading)
+          .textSelection(.enabled)
+          .accessibilityAddTraits(.isHeader)
+      } else {
+        TextField(
+          "标题",
+          text: Binding(
+            get: { model.currentArticle?.title ?? "" },
+            set: { title in
+              if model.currentArticle?.id == articleID { model.renameArticle(title) }
+            })
+        )
+        .textFieldStyle(.plain)
+        .focused($focused)
+        .onChange(of: focused) { editing in
+          if editing { model.selectBlock(nil) }
+        }
+        .onSubmit(enterBody)
+        .accessibilityLabel("文章标题")
+      }
+    }
+    .font(.system(size: 32, weight: .semibold))
+  }
+}
+
 private struct TextBlockEditor: View {
   @ObservedObject var model: WorkspaceViewModel
   let block: DocumentBlock
   let articleID: UUID
-  @State private var height: CGFloat = 40
+  let focusRequest: UUID?
+  @State private var height: CGFloat = 22
 
   var body: some View {
     NativeRichText(
@@ -139,19 +232,10 @@ private struct TextBlockEditor: View {
         guard let target = model.imageImportTarget(after: block.id) else { return }
         model.receiveImage(payload, target: target)
       },
-      focusOnMount: model.state.selectedBlockID == block.id && block.text.string.utf16.count == 0
+      focusOnMount: model.state.selectedBlockID == block.id && block.text.string.isEmpty,
+      focusRequest: model.state.selectedBlockID == block.id ? focusRequest : nil
     )
     .frame(height: height)
-    .overlay(alignment: .topLeading) {
-      if block.text.string.utf16.count == 0 && !model.isEditorLocked {
-        Text("写下第一句话…")
-          .font(.system(size: 17))
-          .foregroundStyle(.tertiary)
-          .padding(.top, 4)
-          .allowsHitTesting(false)
-          .accessibilityHidden(true)
-      }
-    }
   }
 }
 
@@ -159,6 +243,7 @@ private struct ImageBlockEditor: View {
   @ObservedObject var model: WorkspaceViewModel
   let block: DocumentBlock
   @Environment(\.documentImageResolver) private var imageResolver
+  @FocusState private var captionFocused: Bool
   private var selected: Bool { model.state.selectedBlockID == block.id }
 
   var body: some View {
@@ -198,6 +283,7 @@ private struct ImageBlockEditor: View {
             }
             Divider().frame(height: 14)
             Button("替换") { model.chooseImage(replacing: block.id) }
+            Button("图注") { captionFocused = true }
             Button("替代文字") {
               model.state.imageDescription = content.altText
               model.state.sheet = .imageDescription
@@ -214,19 +300,27 @@ private struct ImageBlockEditor: View {
           .background(.regularMaterial, in: Capsule())
         }
 
-        TextField(
-          "添加图注",
-          text: Binding(
-            get: { content.caption },
-            set: { caption in
-              model.editImage(block.id) { $0.caption = caption }
-            }), axis: .vertical
-        )
-        .font(.system(size: 13)).multilineTextAlignment(.center)
-        .foregroundStyle(PaperTheme.secondaryText).textFieldStyle(.plain)
-        .disabled(model.isEditorLocked)
-        .onTapGesture { model.selectBlock(block.id) }
-        .accessibilityLabel("图片说明")
+        if model.isEditorLocked {
+          if !content.caption.isEmpty {
+            Text(content.caption)
+              .font(.system(size: 13)).foregroundStyle(PaperTheme.secondaryText)
+              .multilineTextAlignment(.center).textSelection(.enabled)
+          }
+        } else if !content.caption.isEmpty || selected {
+          TextField(
+            "",
+            text: Binding(
+              get: { content.caption },
+              set: { caption in
+                model.editImage(block.id) { $0.caption = caption }
+              }), axis: .vertical
+          )
+          .font(.system(size: 13)).multilineTextAlignment(.center)
+          .foregroundStyle(PaperTheme.secondaryText).textFieldStyle(.plain)
+          .onTapGesture { model.selectBlock(block.id) }
+          .accessibilityLabel("图片说明")
+          .focused($captionFocused)
+        }
       }
     }
   }
@@ -256,43 +350,47 @@ private struct TableBlockEditor: View {
   var body: some View {
     if let table = block.table {
       VStack(alignment: .trailing, spacing: 6) {
-        Menu {
-          Button("上方插入行") { model.insertTableRow(block.id, at: selectedRow(in: table) ?? 0) }
-            .disabled(
-              table.rows.count >= 40)
-          Button("下方插入行") {
-            model.insertTableRow(block.id, at: (selectedRow(in: table) ?? table.rows.count - 1) + 1)
-          }.disabled(table.rows.count >= 40)
-          Button("左侧插入列") { model.insertTableColumn(block.id, at: selectedColumn(in: table) ?? 0) }
+        if !model.isEditorLocked {
+          Menu {
+            Button("上方插入行") { model.insertTableRow(block.id, at: selectedRow(in: table) ?? 0) }
+              .disabled(
+                table.rows.count >= 40)
+            Button("下方插入行") {
+              model.insertTableRow(
+                block.id, at: (selectedRow(in: table) ?? table.rows.count - 1) + 1)
+            }.disabled(table.rows.count >= 40)
+            Button("左侧插入列") {
+              model.insertTableColumn(block.id, at: selectedColumn(in: table) ?? 0)
+            }
             .disabled(table.columnCount >= 8)
-          Button("右侧插入列") {
-            model.insertTableColumn(
-              block.id, at: (selectedColumn(in: table) ?? table.columnCount - 1) + 1)
-          }.disabled(table.columnCount >= 8)
-          Divider()
-          Button("删除当前行") {
-            model.deleteTableRow(block.id, at: selectedRow(in: table) ?? table.rows.count - 1)
-            focus.cell = nil
+            Button("右侧插入列") {
+              model.insertTableColumn(
+                block.id, at: (selectedColumn(in: table) ?? table.columnCount - 1) + 1)
+            }.disabled(table.columnCount >= 8)
+            Divider()
+            Button("删除当前行") {
+              model.deleteTableRow(block.id, at: selectedRow(in: table) ?? table.rows.count - 1)
+              focus.cell = nil
+            }
+            .disabled(table.rows.count <= 1)
+            Button("删除当前列") {
+              model.deleteTableColumn(
+                block.id, at: selectedColumn(in: table) ?? table.columnCount - 1)
+              focus.cell = nil
+            }
+            .disabled(table.columnCount <= 1)
+            Toggle(
+              "标题行",
+              isOn: Binding(
+                get: { table.hasHeader },
+                set: { value in model.editTable(block.id) { $0.hasHeader = value } }))
+            Divider()
+            Button("删除表格", role: .destructive) { model.deleteBlock(block.id) }
+          } label: {
+            Image(systemName: "ellipsis").frame(width: 24, height: 18)
           }
-          .disabled(table.rows.count <= 1)
-          Button("删除当前列") {
-            model.deleteTableColumn(
-              block.id, at: selectedColumn(in: table) ?? table.columnCount - 1)
-            focus.cell = nil
-          }
-          .disabled(table.columnCount <= 1)
-          Toggle(
-            "标题行",
-            isOn: Binding(
-              get: { table.hasHeader },
-              set: { value in model.editTable(block.id) { $0.hasHeader = value } }))
-          Divider()
-          Button("删除表格", role: .destructive) { model.deleteBlock(block.id) }
-        } label: {
-          Image(systemName: "ellipsis").frame(width: 24, height: 18)
+          .menuStyle(.borderlessButton).fixedSize().help("表格操作")
         }
-        .menuStyle(.borderlessButton).fixedSize().help("表格操作")
-        .disabled(model.isEditorLocked)
 
         ScrollView(.horizontal) {
           Grid(horizontalSpacing: 1, verticalSpacing: 1) {
@@ -330,7 +428,6 @@ private struct TableBlockEditor: View {
                       .background(
                         row == 0 && table.hasHeader ? PaperTheme.secondaryPaper : PaperTheme.paper
                       )
-                      .disabled(model.isEditorLocked)
                       .accessibilityLabel("第 \(row + 1) 行，第 \(column + 1) 列")
                     }
                   }

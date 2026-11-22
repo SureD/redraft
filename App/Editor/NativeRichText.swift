@@ -14,11 +14,16 @@ struct NativeRichText: NSViewRepresentable {
   var onSelection: (NSRange) -> Void
   var onImageTransfer: (ImageTransferPayload) -> Void = { _ in }
   var focusOnMount = false
+  var focusRequest: UUID? = nil
 
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
   func makeNSView(context: Context) -> BlockTextView {
-    let view = BlockTextView(usingTextLayoutManager: true)
+    let layout = WritingTextLayoutManager()
+    let container = NSTextContainer()
+    context.coordinator.textContentStorage.addTextLayoutManager(layout)
+    layout.textContainer = container
+    let view = BlockTextView(frame: .zero, textContainer: container)
     view.delegate = context.coordinator
     view.blockID = blockID
     view.editorSession = session
@@ -36,11 +41,12 @@ struct NativeRichText: NSViewRepresentable {
     view.textContainerInset = .zero
     view.textContainer?.lineFragmentPadding = 0
     view.textContainer?.widthTracksTextView = true
-    view.minSize = NSSize(width: 0, height: 34)
+    view.minSize = .zero
     view.maxSize = NSSize(
       width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-    view.typingAttributes = EditorTypography.bodyAttributes
-    view.textStorage?.setAttributedString(RichTextBridge.attributedString(from: content()))
+    let initial = context.coordinator.baseContent
+    view.textStorage?.setAttributedString(RichTextBridge.attributedString(from: initial))
+    if initial.string.isEmpty { view.restoreEmptyParagraphStyle(initial) }
     view.setAccessibilityLabel("正文段落")
     view.heightChanged = { [weak coordinator = context.coordinator] height in
       coordinator?.updateHeight(height)
@@ -55,8 +61,9 @@ struct NativeRichText: NSViewRepresentable {
       guard let view else { return }
       coordinator?.commit(view)
     }
-    view.shouldFocusOnMount = { [weak coordinator = context.coordinator] in
-      coordinator?.parent.focusOnMount == true
+    view.didMount = { [weak coordinator = context.coordinator, weak view] in
+      guard let coordinator, let view else { return }
+      coordinator.focusIfRequested(view, onMount: true)
     }
     return view
   }
@@ -66,13 +73,17 @@ struct NativeRichText: NSViewRepresentable {
     view.isEditable = editable
     view.blockID = blockID
     view.editorSession = session
+    view.presentedHeight = measuredHeight
     if !view.hasMarkedText() {
-      context.coordinator.baseContent = content()
-      let displayed = RichTextBridge.attributedString(from: context.coordinator.baseContent)
+      let current = content()
+      let contentChanged = current != context.coordinator.baseContent
+      context.coordinator.baseContent = current
+      let displayed = RichTextBridge.attributedString(from: current)
       context.coordinator.isSynchronizing = true
       if !view.attributedString().isEqual(to: displayed) {
         view.textStorage?.setAttributedString(displayed)
       }
+      if current.string.isEmpty && contentChanged { view.restoreEmptyParagraphStyle(current) }
       if let requested = selection {
         let location = min(max(0, requested.location), displayed.length)
         let bounded = NSRange(
@@ -80,8 +91,9 @@ struct NativeRichText: NSViewRepresentable {
         if view.selectedRange() != bounded { view.setSelectedRange(bounded) }
       }
       context.coordinator.isSynchronizing = false
-      DispatchQueue.main.async { [weak view] in
-        guard let view else { return }
+      DispatchQueue.main.async { [weak view, weak coordinator = context.coordinator] in
+        guard let view, let coordinator else { return }
+        coordinator.focusIfRequested(view)
         view.editorSession?.refresh(from: view)
       }
     }
@@ -89,13 +101,26 @@ struct NativeRichText: NSViewRepresentable {
   }
 
   @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
+    let textContentStorage = NSTextContentStorage()
     var parent: NativeRichText
     var isSynchronizing = false
     var baseContent: RichTextContent
+    private var handledFocusRequest: UUID?
 
     init(_ parent: NativeRichText) {
       self.parent = parent
       baseContent = parent.content()
+    }
+
+    func focusIfRequested(_ view: BlockTextView, onMount: Bool = false) {
+      guard view.isEditable, let window = view.window else { return }
+      let request = parent.focusRequest
+      guard (request != nil && request != handledFocusRequest) || (onMount && parent.focusOnMount)
+      else { return }
+      if window.makeFirstResponder(view) {
+        handledFocusRequest = request
+        view.revealInsertionPointAfterLayout()
+      }
     }
 
     func textDidChange(_ notification: Notification) {
@@ -116,10 +141,12 @@ struct NativeRichText: NSViewRepresentable {
         let location = min(view.selectedRange().location, displayed.length)
         view.textStorage?.setAttributedString(displayed)
         view.setSelectedRange(NSRange(location: location, length: 0))
+        if displayed.length == 0 { view.restoreEmptyParagraphStyle(baseContent) }
         isSynchronizing = false
       }
       parent.onSelection(view.selectedRange())
       parent.session.refresh(from: view)
+      if accepted { view.revealInsertionPointAfterLayout() }
       view.needsLayout = true
     }
 
@@ -139,6 +166,36 @@ struct NativeRichText: NSViewRepresentable {
   }
 }
 
+/// Keep the system insertion point on the typing font's baseline when the rest
+/// of its line is taller, for example in mixed sizes or a double-spaced paragraph.
+private final class WritingTextLayoutManager: NSTextLayoutManager {
+  private let fontMetrics = NSLayoutManager()
+
+  override func enumerateTextSegments(
+    in range: NSTextRange, type: SegmentType, options: SegmentOptions,
+    using block: (NSTextRange?, CGRect, CGFloat, NSTextContainer) -> Bool
+  ) {
+    guard range.isEmpty, type == .selection || type == .standard,
+      let selection = textSelections.first(where: { $0.textRanges.contains(range) }),
+      let font = selection.typingAttributes[.font] as? NSFont
+    else {
+      super.enumerateTextSegments(in: range, type: type, options: options, using: block)
+      return
+    }
+    let height = fontMetrics.defaultLineHeight(for: font)
+    let ascent = fontMetrics.defaultBaselineOffset(for: font)
+    super.enumerateTextSegments(in: range, type: type, options: options) {
+      segment, frame, baseline, container in
+      guard height < frame.height else { return block(segment, frame, baseline, container) }
+      var caret = frame
+      let offset = min(frame.height - height, max(0, baseline - ascent))
+      caret.origin.y += offset
+      caret.size.height = height
+      return block(segment, caret, baseline - offset, container)
+    }
+  }
+}
+
 @MainActor final class BlockTextView: NSTextView {
   var blockID: UUID?
   weak var editorSession: EditorSession?
@@ -146,8 +203,10 @@ struct NativeRichText: NSViewRepresentable {
   var heightChanged: ((CGFloat) -> Void)?
   var selectionChanged: ((NSRange) -> Void)?
   var imageTransferred: ((ImageTransferPayload) -> Void)?
-  var shouldFocusOnMount: (() -> Bool)?
+  var didMount: (() -> Void)?
+  var presentedHeight: CGFloat = 0
   private let editingUndoManager = UndoManager()
+  private var shouldRevealInsertionPoint = false
 
   // A detached paragraph must never leave undo actions targeting another article's editor.
   override var undoManager: UndoManager? { editingUndoManager }
@@ -158,10 +217,7 @@ struct NativeRichText: NSViewRepresentable {
       editorSession?.detach(self)
       return
     }
-    DispatchQueue.main.async { [weak self] in
-      guard let self, self.isEditable, self.shouldFocusOnMount?() == true else { return }
-      self.window?.makeFirstResponder(self)
-    }
+    DispatchQueue.main.async { [weak self] in self?.didMount?() }
   }
 
   override func paste(_ sender: Any?) {
@@ -205,6 +261,13 @@ struct NativeRichText: NSViewRepresentable {
     return result
   }
 
+  // An empty attributed string carries no font. TextKit uses the typing attributes
+  // to lay out its insertion line and to style the first character that fills it.
+  func restoreEmptyParagraphStyle(_ content: RichTextContent) {
+    typingAttributes = RichTextBridge.attributes(
+      style: content.defaultStyle, paragraph: content.paragraphStyle)
+  }
+
   func applyFormatting(
     _ value: NSAttributedString, selection: NSRange, typing: [NSAttributedString.Key: Any]
   ) {
@@ -236,25 +299,51 @@ struct NativeRichText: NSViewRepresentable {
     compositionCommitted?()
   }
 
+  func revealInsertionPointAfterLayout() {
+    guard window?.firstResponder === self, selectedRange().length == 0 else { return }
+    shouldRevealInsertionPoint = true
+    needsLayout = true
+  }
+
   override func layout() {
     super.layout()
     guard let manager = textLayoutManager, let content = manager.textContentManager else { return }
     textContainer?.containerSize = NSSize(
       width: max(1, bounds.width), height: CGFloat.greatestFiniteMagnitude)
     manager.ensureLayout(for: content.documentRange)
-    heightChanged?(max(34, ceil(manager.usageBoundsForTextContainer.height) + 6))
+    let height = ceil(manager.usageBoundsForTextContainer.height)
+    heightChanged?(height)
+    // SwiftUI sizes the surrounding scroll document from our measured height.
+    // Wait until it has made space for the new line before consuming this edit.
+    if shouldRevealInsertionPoint, abs(presentedHeight - height) <= 0.5 {
+      shouldRevealInsertionPoint = false
+      DispatchQueue.main.async { [weak self] in self?.revealInsertionPoint() }
+    }
+  }
+
+  private func revealInsertionPoint() {
+    guard window?.firstResponder === self, let document = enclosingScrollView?.documentView,
+      let manager = textLayoutManager, let selection = manager.textSelections.first,
+      let range = selection.textRanges.first,
+      range.isEmpty
+    else { return }
+    window?.contentView?.layoutSubtreeIfNeeded()
+    let options: NSTextLayoutManager.SegmentOptions =
+      selection.affinity == .upstream
+      ? [.rangeNotRequired, .upstreamAffinity] : [.rangeNotRequired]
+    manager.enumerateTextSegments(in: range, type: .selection, options: options) {
+      _, frame, _, _ in
+      var rect = frame.offsetBy(dx: self.textContainerOrigin.x, dy: self.textContainerOrigin.y)
+      rect.size.width = max(1, rect.width)
+      document.scrollToVisible(self.convert(rect, to: document))
+      return false
+    }
   }
 }
 
 @MainActor enum EditorTypography {
   static var bodyAttributes: [NSAttributedString.Key: Any] {
-    let paragraph = NSMutableParagraphStyle()
-    paragraph.lineHeightMultiple = 1.7
-    paragraph.paragraphSpacing = 7
-    return [
-      .font: NSFont.systemFont(ofSize: 17), .foregroundColor: PaperTheme.textColor,
-      .paragraphStyle: paragraph,
-    ]
+    RichTextBridge.attributes(style: TextStyle(), paragraph: ParagraphStyle())
   }
 
   static func displayText(_ value: NSAttributedString) -> NSAttributedString {

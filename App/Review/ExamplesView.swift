@@ -9,8 +9,6 @@ struct ExamplesView: View {
       VStack(alignment: .leading, spacing: 24) {
         VStack(alignment: .leading, spacing: 18) {
           Text("改写范例").font(.system(size: 29, weight: .semibold))
-          Text("把每一次取舍，留给下一次写作。")
-            .font(.callout).foregroundStyle(.secondary)
           Picker("按取舍筛选", selection: $model.state.exampleFilter) {
             ForEach(ExampleFilter.allCases, id: \.self) { filter in
               Text(filter.title).tag(filter)
@@ -43,7 +41,7 @@ struct ExamplesView: View {
           ReviewEmptyState(
             symbol: "text.quote",
             title: model.examples.isEmpty ? "还没有改写范例" : "没有符合条件的范例",
-            detail: model.examples.isEmpty ? "审阅中的取舍会汇集在这里。" : "试试其他关键词或取舍类型。",
+            detail: model.examples.isEmpty ? "成稿后，可以在这里回看选用的表达。" : "试试其他关键词或取舍类型。",
             actionTitle: model.examples.isEmpty ? nil : "清除筛选",
             action: {
               model.state.exampleQuery = ""
@@ -111,6 +109,6 @@ struct ExamplesView: View {
   }
 
   private func articleTitle(_ id: UUID) -> String {
-    model.articles.first(where: { $0.id == id })?.title ?? "文章"
+    model.articles.first(where: { $0.id == id })?.displayTitle ?? "文章"
   }
 }

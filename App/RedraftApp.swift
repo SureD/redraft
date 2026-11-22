@@ -12,8 +12,10 @@ struct RedraftApp: App {
     do {
       model = try WorkspaceViewModel(
         source: DemoWorkspaceContentSource(), reviewProvider: DemoReviewProvider())
+      model.newArticle()
     } catch {
       model = WorkspaceViewModel(store: WorkspaceStore(), reviewProvider: DemoReviewProvider())
+      model.newArticle()
       model.showNotice("示例数据加载失败：\(error.localizedDescription)")
     }
     _model = StateObject(wrappedValue: model)
@@ -26,6 +28,9 @@ struct RedraftApp: App {
     }
     .defaultSize(width: 1220, height: 820)
     .windowStyle(.hiddenTitleBar)
-    .commands { WorkspaceCommands(model: model) }
+    .commands {
+      WorkspaceCommands(model: model)
+      FormattingCommands(model: model)
+    }
   }
 }

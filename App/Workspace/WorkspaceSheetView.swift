@@ -112,7 +112,7 @@ struct WorkspaceSheetView: View {
       }
     case .statistics:
       if let article = model.currentArticle {
-        Text(article.title).foregroundStyle(.secondary)
+        Text(article.displayTitle).foregroundStyle(.secondary)
         HStack(spacing: 40) {
           metric("字符", value: article.characterCount)
           metric("段落", value: article.blocks.filter { $0.kind == .text }.count)
@@ -128,27 +128,23 @@ struct WorkspaceSheetView: View {
           .frame(width: 70, height: 70).foregroundStyle(PaperTheme.paper)
           .background(Color.primary, in: RoundedRectangle(cornerRadius: 16))
         VStack(alignment: .leading, spacing: 7) {
-          Text("每一稿，都有来处。").font(.headline)
-          Text("写下自己的表达，在改写与取舍中慢慢打磨。").foregroundStyle(.secondary)
+          Text("Redraft").font(.headline)
+          Text("伴随式写作编辑器").foregroundStyle(.secondary)
           Text("0.1 · 原生界面预览").font(.caption).foregroundStyle(.secondary)
         }
       }
       Divider()
-      Text("本次预览提供写作、排版和审阅交互。改稿使用示例内容，所有编辑仅保留到退出应用；AI 服务、文章保存与导出尚未接入。")
+      Text("批注来自本地演示。原稿、成稿和段落轨迹仅保留到退出应用。")
         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       dismissButton
     case .shortcuts:
       VStack(spacing: 12) {
         shortcut("新建文章", "⌘ N")
-        shortcut("写作 / 审阅 / 历史", "⌘ 1 / 2 / 3")
         shortcut("切换文章库", "⌃ ⌘ S")
-        shortcut("切换检查器", "⌘ ⌥ I")
-        shortcut("预览改稿 / 进入审阅", "⌘ ↩")
+        shortcut("请求或阅读批注", "⌘ ↩")
         Divider()
         shortcut("粗体 / 斜体 / 下划线", "⌘ B / I / U")
         shortcut("撤销 / 重做（正文）", "⌘ Z / ⌘ ⇧ Z")
-        shortcut("审阅：前后修改", "K / J")
-        shortcut("审阅：采用 / 保留 / 重写", "A / O / E")
         shortcut("显示快捷键", "⌘ /")
       }
       dismissButton

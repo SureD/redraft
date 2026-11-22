@@ -5,10 +5,14 @@ import RedraftCore
 struct ArticleViewState: Identifiable {
   let document: Article
   let versions: [ArticleVersion]
+  let rounds: [AnnotationRound]
   let review: ReviewState
 
   var id: UUID { document.id }
   var title: String { document.title }
+  var displayTitle: String {
+    title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名文章" : title
+  }
   var updatedAt: Date { document.updatedAt }
   var blocks: [DocumentBlock] { document.blocks }
   var marks: [UUID: String] { document.marks }
@@ -17,7 +21,7 @@ struct ArticleViewState: Identifiable {
   var preview: String { blocks.first(where: { $0.kind == .text })?.plainText ?? "空白文章" }
   var phase: ArticlePhase {
     switch review {
-    case .idle, .failed: .idle
+    case .idle, .noSuggestions, .failed: .idle
     case .running: .running
     case .ready: .ready
     }
@@ -27,6 +31,7 @@ struct ArticleViewState: Identifiable {
   init(session: ArticleSession) {
     document = session.document
     versions = session.versions
+    rounds = session.rounds
     review = session.review
   }
 }

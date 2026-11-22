@@ -26,6 +26,14 @@ public struct Article: Identifiable, Equatable, Sendable {
 
   public var characterCount: Int { blocks.reduce(0) { $0 + $1.plainText.count } }
 
+  /// A title alone has no paragraph to annotate.
+  public var canRequestAnnotations: Bool {
+    blocks.contains { block in
+      block.kind != .text
+        || !block.text.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+  }
+
   public func normalized() -> Article {
     var result = self
     result.blocks = blocks.map { $0.normalized() }

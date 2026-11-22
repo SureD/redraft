@@ -51,9 +51,9 @@ final class WorkspaceStore: ObservableObject {
     changes.send()
   }
 
-  func finishPreviewReview(articleID: UUID) throws {
+  func finishReview(articleID: UUID, acceptRemaining: Bool) throws {
     guard let session = session(for: articleID) else { return }
-    examples.append(contentsOf: try session.finishPreviewReview())
+    examples.append(contentsOf: try session.finishReview(acceptRemaining: acceptRemaining))
     changes.send()
   }
 

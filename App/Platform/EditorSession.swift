@@ -10,6 +10,13 @@ final class EditorSession: ObservableObject {
   private var selectedRange: NSRange?
   private var style: EditorSelectionStyle?
 
+  /// TextKit keeps the input method's unconfirmed characters outside the document snapshot.
+  var hasMarkedText: Bool {
+    if current?.hasMarkedText() == true { return true }
+    let window = current?.window ?? NSApp?.keyWindow
+    return (window?.firstResponder as? NSTextView)?.hasMarkedText() == true
+  }
+
   func activate(_ editor: BlockTextView) {
     current = editor
     refresh(from: editor)

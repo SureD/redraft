@@ -1,11 +1,12 @@
 import Foundation
 
 /// One open article's writable owner. Views observe immutable value snapshots from this session.
-/// This in-memory implementation does not provide persistence, AI or review composition.
+/// Document edits and accepted annotation rounds are held in memory.
 @MainActor
 public final class ArticleSession {
   public private(set) var document: Article
   public private(set) var versions: [ArticleVersion]
+  public private(set) var rounds: [AnnotationRound] = []
   public private(set) var review: ReviewState
 
   private var observers: [UUID: @MainActor () -> Void] = [:]
@@ -35,7 +36,7 @@ public final class ArticleSession {
     switch review {
     case .ready(let batch): try batch.validate(against: document)
     case .running: throw EditingError.invalidReview
-    case .idle, .failed: break
+    case .idle, .noSuggestions, .failed: break
     }
     self.document = document
     self.versions = versions
@@ -84,7 +85,7 @@ public final class ArticleSession {
   }
 
   public func beginReview(using provider: any ReviewProviding) throws {
-    guard !review.isRunning, !review.isReady, !document.marks.isEmpty else {
+    guard !review.isRunning, !review.isReady, document.canRequestAnnotations else {
       throw EditingError.invalidReview
     }
     let request = ReviewRequest(article: document)
@@ -102,7 +103,7 @@ public final class ArticleSession {
         guard changes.allSatisfy({ $0.decision == nil && $0.rewrittenText.isEmpty }) else {
           throw EditingError.invalidReview
         }
-        self.review = changes.isEmpty ? .idle : .ready(batch)
+        self.review = changes.isEmpty ? .noSuggestions : .ready(batch)
         self.reviewTask = nil
         self.notify()
       } catch {
@@ -115,7 +116,7 @@ public final class ArticleSession {
   }
 
   public func cancelReview() {
-    guard review.isRunning else { return }
+    guard review.isRunning || review.isReady else { return }
     reviewTask?.cancel()
     reviewTask = nil
     review = .idle
@@ -145,15 +146,31 @@ public final class ArticleSession {
     }
   }
 
-  /// Preview completion records choices only; applying/merging suggestions remains unimplemented.
-  public func finishPreviewReview() throws -> [RewriteExample] {
-    guard case .ready(let batch) = review, !batch.changes.isEmpty else {
+  /// Apply the entire selection once. A failed merge leaves the document and pending batch intact.
+  public func finishReview(acceptRemaining: Bool = false) throws -> [RewriteExample] {
+    guard case .ready(var batch) = review, !batch.changes.isEmpty else {
       throw EditingError.invalidReview
     }
     try batch.validate(against: document)
-    guard batch.changes.allSatisfy({ $0.decision != nil }) else {
-      throw EditingError.unresolvedChanges
+    for index in batch.changes.indices where batch.changes[index].decision == nil {
+      batch.changes[index].decision = acceptRemaining ? .accept : .keep
     }
+    let source = document
+    let selected = Dictionary(
+      grouping: batch.changes.filter { $0.decision != .keep }, by: \.blockID)
+    var result = source
+    result.blocks = try source.blocks.map { block in
+      guard let changes = selected[block.id] else { return block }
+      return try block.applyingAnnotations(changes)
+    }
+    result.marks.removeAll()
+    let now = Date()
+    if result != source {
+      result.revisionID = UUID()
+      result.updatedAt = now
+    }
+    try result.validate()
+
     let examples = batch.changes.compactMap { change -> RewriteExample? in
       guard let decision = change.decision else { return nil }
       let after: String
@@ -163,10 +180,14 @@ public final class ArticleSession {
       case .rewrite: after = change.rewrittenText
       }
       return RewriteExample(
-        articleID: document.id, blockID: change.blockID, before: change.before, after: after,
+        articleID: source.id, blockID: change.blockID, before: change.before, after: after,
         decision: decision, reason: change.reason.isEmpty ? change.explanation : change.reason,
         tag: change.kind.rawValue)
     }
+    rounds.append(
+      AnnotationRound(id: UUID(), date: now, source: source, result: result, changes: batch.changes)
+    )
+    document = result
     review = .idle
     notify()
     return examples

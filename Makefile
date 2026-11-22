@@ -1,4 +1,4 @@
-.PHONY: architecture build core-build lint project run test test-ui test-editor snapshots
+.PHONY: architecture build core-build lint monitor project run test test-ui test-editor snapshots
 
 UI_SOURCES := $(shell rg --files App -g '*.swift' | rg -v 'App/RedraftApp.swift')
 SWIFT_FLAGS ?=
@@ -51,3 +51,6 @@ lint:
 
 architecture:
 	python3 scripts/update_architecture.py
+
+monitor:
+	python3 scripts/agent_monitor.py serve

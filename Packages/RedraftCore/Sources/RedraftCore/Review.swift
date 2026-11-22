@@ -75,7 +75,9 @@ public struct ReviewBatch: Equatable, Sendable {
       throw EditingError.invalidReview
     }
     for change in changes {
-      guard let block = article.blocks.first(where: { $0.id == change.blockID }) else {
+      guard article.marks.isEmpty || article.marks[change.blockID] != nil,
+        let block = article.blocks.first(where: { $0.id == change.blockID })
+      else {
         throw EditingError.invalidTarget
       }
       if let before = change.beforeBlock, before != block { throw EditingError.invalidReview }
@@ -93,8 +95,18 @@ public struct ReviewBatch: Equatable, Sendable {
   }
 }
 
+/// A completed reading pass. Source and result stay available even if the author edits again.
+public struct AnnotationRound: Identifiable, Equatable, Sendable {
+  public let id: UUID
+  public let date: Date
+  public let source: Article
+  public let result: Article
+  public let changes: [ReviewChange]
+}
+
 public enum ReviewState: Equatable, Sendable {
   case idle
+  case noSuggestions
   case running(ReviewRequest)
   case ready(ReviewBatch)
   case failed(String)

@@ -70,7 +70,7 @@ struct ArticleSidebar: View {
             maxWidth: .infinity, alignment: .leading)
         }.buttonStyle(.plain).font(.system(size: 13, weight: .medium))
           .help("新建文章 · ⌘N")
-        Text("界面预览 · 内容仅保留本次运行")
+        Text("仅保留至退出 · 本地示例批注")
           .font(.system(size: 10)).foregroundStyle(.secondary)
       }.padding(.horizontal, 20).padding(.bottom, 18)
     }
@@ -93,14 +93,15 @@ struct ArticleSidebar: View {
         Image(systemName: "doc.text").foregroundStyle(selected ? PaperTheme.accent : .secondary)
           .font(.system(size: 15)).padding(.top, 2)
         VStack(alignment: .leading, spacing: 6) {
-          Text(article.title.isEmpty ? "未命名文章" : article.title)
+          Text(article.displayTitle)
             .font(.system(size: 13, weight: .medium)).lineLimit(1)
           Text(article.preview).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
           HStack(spacing: 6) {
             Text(article.updatedAt, format: .dateTime.month().day())
             if article.phase != .idle {
               Text("·")
-              Text(article.phase == .running ? "改稿中" : "待审阅").foregroundStyle(PaperTheme.accent)
+              Text(article.phase == .running ? "正在批注" : "\(article.changes.count) 条批注")
+                .foregroundStyle(PaperTheme.accent)
             }
           }.font(.system(size: 10)).foregroundStyle(.secondary)
         }
@@ -127,7 +128,7 @@ struct ArticleSidebar: View {
   private func confirmDelete(_ article: ArticleViewState) {
     guard let window = NSApp.keyWindow else { return }
     let alert = NSAlert()
-    alert.messageText = "删除“\(article.title)”？"
+    alert.messageText = "删除“\(article.displayTitle)”？"
     alert.informativeText = "这篇文章及本次运行中的修改会被移除。"
     alert.addButton(withTitle: "取消")
     alert.addButton(withTitle: "删除")

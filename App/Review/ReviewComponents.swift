@@ -44,26 +44,16 @@ struct ReviewTag: View {
   }
 }
 
-struct ChangedText: View {
-  let text: String
-  let inserted: Bool
+struct LabeledPassage<Content: View>: View {
+  let title: String
+  @ViewBuilder var content: Content
 
   var body: some View {
-    Text(text.isEmpty ? "（空）" : text)
-      .strikethrough(!inserted)
-      .underline(inserted)
-      .foregroundStyle(inserted ? PaperTheme.insertion : PaperTheme.deletion)
-      .font(.system(size: 16))
-      .lineSpacing(9)
-      .textSelection(.enabled)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 9)
-      .background(
-        (inserted ? PaperTheme.insertion : PaperTheme.deletion).opacity(0.07),
-        in: RoundedRectangle(cornerRadius: 5)
-      )
-      .accessibilityLabel("\(inserted ? "新增" : "删除")：\(text)")
+    VStack(alignment: .leading, spacing: 6) {
+      Text(title).font(.caption).foregroundStyle(.secondary)
+      content.font(.callout).lineSpacing(5)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
@@ -132,16 +122,13 @@ struct SnapshotBlockView: View {
 struct ReviewDecisionButtons: View {
   @ObservedObject var model: WorkspaceViewModel
   let change: ReviewChange
-  var compact: Bool = false
-
   var body: some View {
-    HStack(spacing: compact ? 5 : 9) {
-      decisionButton(.keep, symbol: "arrow.uturn.backward", label: "保留")
+    HStack(spacing: 7) {
       decisionButton(.accept, symbol: "checkmark", label: "采用")
+      decisionButton(.keep, symbol: "arrow.uturn.backward", label: "保留原文")
       if change.kind == .text {
         Button {
-          model.selectChange(change.id)
-          model.decide(.rewrite)
+          model.decide(.rewrite, changeID: change.id)
         } label: {
           Label("重写", systemImage: "pencil")
         }
@@ -150,7 +137,7 @@ struct ReviewDecisionButtons: View {
       }
     }
     .buttonStyle(.bordered)
-    .controlSize(compact ? .small : .regular)
+    .controlSize(.small)
   }
 
   private func decisionButton(_ decision: ReviewDecision, symbol: String, label: String)
