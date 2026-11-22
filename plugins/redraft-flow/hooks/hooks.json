@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -B \"$PLUGIN_ROOT/hooks/receive.py\"",
+            "timeout": 8
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I -B \"$PLUGIN_ROOT/hooks/receive.py\"",
+            "timeout": 8
+          }
+        ]
+      }
+    ]
+  }
+}

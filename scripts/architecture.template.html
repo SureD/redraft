@@ -39,6 +39,8 @@ button { border: 0; }
 h1 { font-size: 30px; letter-spacing: -.7px; line-height: 1.2; font-weight: 650; }
 .snapshot { color: var(--secondary); font-size: 12px; text-align: right; padding-top: 5px; }
 .snapshot div + div { margin-top: 3px; }
+.monitor-link { color: var(--blue); font-size: 14px; text-underline-offset: 3px; }
+.monitor-link:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
 .branch { display: inline-block; max-width: 400px; overflow-wrap: anywhere; color: var(--ink); }
 .stale { margin: 0 0 18px; padding: 12px 16px; border-radius: 12px; background: color-mix(in srgb, var(--amber) 11%, var(--surface)); color: var(--ink); font-size: 13px; }
 .stale strong { color: var(--amber); margin-right: 10px; }
@@ -165,7 +167,7 @@ dialog::backdrop { background: #0000003d; backdrop-filter: blur(5px); }
 <div class="app">
   <header class="top">
     <div><div class="brand"><span class="brand-mark" aria-hidden="true">r</span> Redraft</div><h1>架构</h1></div>
-    <div class="snapshot" id="review-date"></div>
+    <div class="snapshot"><a class="monitor-link" id="monitor-link" href="http://127.0.0.1:8765/">需求运行看板</a><div id="monitor-start">本地启动 <code>make monitor</code></div><div id="review-date"></div></div>
   </header>
   <p class="stale" id="stale" hidden><strong>代码或设计已变化，模块状态待复核</strong>下面的模块状态保留上次核对结果，可打开源码查看当前内容。</p>
   <div class="topbar">
@@ -198,6 +200,13 @@ dialog::backdrop { background: #0000003d; backdrop-filter: blur(5px); }
   const statusNames = { scaffold: '应用骨架', partial: '部分实现', interface: '接口已定义', planned: '待实现', implemented: '已实现' };
   const layerNames = { app: 'App / 客户端', core: 'RedraftCore / 核心', adapters: 'App / 外部适配器' };
   const nodeByID = new Map(data.nodes.map(node => [node.id, node]));
+  function moduleFromURL() { return new URLSearchParams(location.hash.slice(1)).get('module'); }
+  if (nodeByID.has(moduleFromURL())) state.selected = moduleFromURL();
+  window.addEventListener('hashchange', () => selectNode(moduleFromURL()));
+  if (['127.0.0.1', 'localhost'].includes(location.hostname) && location.protocol === 'http:' && location.pathname === '/architecture.html' && new URLSearchParams(location.search).has('monitor')) {
+    $('monitor-link').href = '/';
+    $('monitor-start').hidden = true;
+  }
   const positions = { app: [3.7, 13], editor: [3.7, 41], session: [28, 13], document: [28, 41], diff: [28, 73], rewrite: [52, 41], storage: [52, 73], ai: [78, 41], library: [78, 73] };
   const nodeElements = new Map();
   const svgNS = 'http://www.w3.org/2000/svg';

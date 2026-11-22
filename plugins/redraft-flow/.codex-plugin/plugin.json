@@ -1,0 +1,13 @@
+{
+  "name": "redraft-flow",
+  "version": "0.1.0",
+  "description": "在 Redraft 中按模块分派需求，把 Codex 子 Agent 的执行记录接入本地看板。",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Redraft Flow",
+    "shortDescription": "按模块分派需求并查看 Agent 运行进展",
+    "category": "Developer Tools",
+    "defaultPrompt": ["按模块协作开发这个需求，记录各 Agent 的进展并完成集成验收。"]
+  }
+}
