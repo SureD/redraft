@@ -2,6 +2,14 @@
 
 本文记录实现方案、模块职责与验证结果。[产品规划](design.md)描述面向作者的特性和交互。
 
+## 正文、稿库与 Agent 的边界（2026-11-28）
+
+保留 SwiftUI 窗口，把整篇正文（含表格和图片）交给一个加载本地资源的 `WKWebView`。`WebEditor/` 只使用 BlockNote 的常规包；选区、组字、块菜单和撤销归同一个编辑器。JS 在组字确认后发布结构化块，Swift 以文章和基准版本经 `ArticleSession` 提交；普通输入、标题和批注范围变化不重挂编辑页。换稿或从外部采用新正文时才载入新的编辑状态。图片字节不随每次按键重复传输，页内只持有本地资源标识。
+
+Core 保留文字、图片、表格及既有 UUID，也保存块编辑器独有的结构。SQLite 是本机文章库；网页缓存不是稿件来源。Markdown 与附件只在显式导出时写到作者选择的目录。表格无行列 ID 的结构性变更以不误挂旧批注为先，不能把位置相同当作对象相同。
+
+「复制摘录给 Agent」只输出当前块或块内选区、文章 ID、块 ID、基准版本和批注要求；无网络发送或后台任务。按段提交资料、核对过期建议和接入作者所选工具仍是后续工作，而不是由编辑器依赖代办。
+
 ## Agent 接入与任务执行（2026-11-28）
 
 当前版本通过 `ReviewProviding` 注入本地演示，以文章版本为基准发起和校验一轮批注。外部 Agent 接入、写作上下文的持久化和后台调度都处于设计阶段。
@@ -20,7 +28,7 @@ Redraft 发起写作 Agent 的建立流程，并生成初始化 Prompt。作者�
 
 验收从空稿写作、请求批注、阅读时保留原文、一次成稿、查看段落轨迹走通，并检查图文表混合建议、窄窗口和原生编辑交互。
 
-正文默认使用当前输入字体的原生行高，块与块之间留少量间距。在混合字号或自定义行距的行中，TextKit 2 按输入字体的基线与高度定位系统插入点，保留整行排版。文档与版本沿用现有标题、图文表块和富文本格式。验收从新建、编辑已有文章及在附件后续写三个入口进行，覆盖标题转正文、清空重输、不同字号、中文组字与撤销。
+编辑态使用系统插入点、选区与撤销。排版工具使用当前文字选区或输入属性。文章库、版本和批注使用 Core 的图文表结构，一个文本块可以包含多个自然段。
 
 ## 原生 UI、数据模型与状态归属（2026-11-15）
 
@@ -40,7 +48,7 @@ Redraft 发起写作 Agent 的建立流程，并生成初始化 Prompt。作者�
 
 `WorkspaceViewModel` 不再持有文章内容副本。它从 Store 中的会话计算 `ArticleViewState`、文章列表、字数、未处理建议数量和操作可用性。UI 读取这些投影并发出动作，文档修改统一经过会话；历史快照是特定版本的只读值，不作为另一个可编辑当前稿。核心状态更新会通知所有订阅者，使共享文章的多个 ViewModel 读取同一事实来源。Store 在变更提交后发出通知，窗口再校正本地引用：其他窗口删除文章或内容块时清理对应选择与弹窗，正文缩短时收拢越界选区，审阅批次结束时关闭已失效的重写弹窗；这些校正不改变其他窗口的文档内容。
 
-原生编辑器通过 `RichTextBridge` 将 Core 语义富文本转换为 `NSAttributedString`，并将原生编辑结果转换回 Core 后提交。标题不再通过字号猜测。窗口级 `EditorSession` 取代进程级静态焦点，工具栏读取它发布的输入会话状态。输入法 marked text 期间只维护原生组字缓冲，不向文档提交中间结果，也不让外部正文覆盖组字。提交时同时携带文章身份与本次原生编辑的基准内容；若该内容已被另一处编辑更新，则拒绝旧缓冲覆盖并恢复当前权威正文，不尝试自动合并冲突。成功提交后立即刷新基准，避免快速连续输入依赖下一次界面重绘。当前按内容块编辑，跨块连续选区与统一文档级撤销仍未实现。
+编辑态把相邻的文字内容块拼入同一个 SwiftUI 富文本 `TextEditor`。块内换行仍归原块；原有块之间的分隔承载身份，使跨段编辑可以作为一次文章会话变更提交。图表使用原有编辑控件。格式命令和选区状态归活动窗口所有；提交须匹配文章与编辑时的原文，以免旧输入覆盖另一窗口的更改。
 
 应用入口显式注入 `WorkspaceContentSource`、`ReviewProviding` 与 `DocumentImageResolving`。默认演示装配放在 `App/Preview`：固定文章与历史、改稿样例、演示延迟、插画资源都属于适配器。通用 ViewModel、编辑器和图片渲染器不认识示例稿件或样例图片名；空数据源保持为空，无法读取的图片显示缺失占位。Core 与业务边界通过同一套真实类型和协议定义，业务服务的实现仍可替换。
 
@@ -50,19 +58,19 @@ Redraft 发起写作 Agent 的建立流程，并生成初始化 Prompt。作者�
 
 视觉沿用纸面配色，正文为不透明暖白 / 炭灰；侧栏、工具栏、检查器用 NSVisualEffectView 原生材质，跟随窗口活跃状态和系统外观，并支持“降低透明度”。默认收起检查器，窄窗口让出阅读空间。使用系统菜单、弹层、键盘快捷键及辅助功能标签。
 
-验证覆盖原生构建、Core 文档不变量与会话测试、共享状态和注入边界测试、编辑器富文本及输入保护、Swift 格式检查，以及真实原生视图的深浅色与窄窗快照。以下技术选型中的 Loro、真实 AI 和磁盘存储描述后续目标，不代表已接入。
+当时的验证覆盖原生构建、Core 文档与会话、共享状态、原生编辑、Swift 格式以及深浅色和窄窗快照。11 月 28 日改用 BlockNote，并接入 SQLite。
 
 ## 技术选型
 
 | 用途 | 选择 | 理由与取舍 |
 | --- | --- | --- |
-| macOS 客户端 | Swift、SwiftUI、AppKit，部署目标为 macOS 13 及以上 | SwiftUI 负责文章列表、批注侧栏和段落轨迹。正文通过 NSViewRepresentable 嵌入 NSTextView，使用系统的输入法、选区、拼写检查和辅助功能。macOS 13 可作为富文本编辑使用 TextKit 2 的基线。[Apple 的 TextKit 说明](https://developer.apple.com/videos/play/wwdc2022/10090/) |
-| 文本编辑与显示 | TextKit 2，以 `NSTextContentStorage`、`NSTextLayoutManager` 和 `NSTextContainer` 装配原生 `NSTextView` | 编辑视图能接收原生文本输入，并在版本对比时绘制差异高亮。代价是应用需要维护视图和文档之间的增量同步。 |
-| 正文、富文本与历史 | 每篇文章一个 LoroDoc，Swift 绑定固定为 1.17.1 | LoroText 表示正文与富文本标记，Cursor 定位段落边界，forkAt 读取历史版本。Swift 绑定仍标为实验性，相关类型封装在文档模块内。采用完整快照以保留早期草稿。[Swift 绑定](https://github.com/loro-dev/loro-swift) · [快照格式](https://loro.dev/docs/tutorial/encoding) |
-| 文本对比 | NaturalLanguage 的 NLTokenizer、Swift 标准库的 difference(from:) | 段落对齐后按句、词和原始标点比较。中英文都能保留可读的修改范围，核心包无需引入第三方 diff 库。[Apple 分词接口](https://developer.apple.com/documentation/naturallanguage/nltokenizer) |
-| 本地保存与导出 | Foundation 文件 API、Loro 完整快照、UTF-8 Markdown | 文章可作为一个目录独立保存和备份。快照保存继续编辑所需的全部状态，Markdown 供阅读和交换。 |
+| macOS 客户端 | Swift、SwiftUI、AppKit，部署目标 macOS 26 | 原生文章库和批注面板与内嵌正文共用一个窗口。 |
+| 文本编辑与显示 | BlockNote / React、本地 WebKit | 图、文、表位于同一份编辑器文档，语义投影连接批注，不把 Markdown 当数据库。 |
+| 正文、富文本与历史 | 当前是 Core 值快照；早期 LoroDoc 方案尚未替代当前文档所有者 | LoroText 表示正文与富文本标记，Cursor 定位段落边界，forkAt 读取历史版本。Swift 绑定仍标为实验性，相关类型封装在文档模块内。采用完整快照以保留早期草稿。[Swift 绑定](https://github.com/loro-dev/loro-swift) · [快照格式](https://loro.dev/docs/tutorial/encoding) |
+| 文本对比 | 现有 `TextDiffing` 接口，具体实现待开发 | 设计方案使用 NaturalLanguage 分词和 Swift 标准库比较段落中的句词与标点。[Apple 分词接口](https://developer.apple.com/documentation/naturallanguage/nltokenizer) |
+| 本地保存与导出 | 系统 SQLite、含结构和身份的快照、UTF-8 Markdown 及附件 | 草稿归本机文章库，导出的 Markdown 不承诺保留格式、块身份或审阅历史。 |
 | AI 批注与 Agent 接入 | 现有 `ReviewProviding` 和本地演示。计划在用户选定的工具中初始化专用写作会话，通过 CLI 或 MCP 与 Redraft 协作 | 所选工具提供 harness，Redraft 提供写作上下文并接收批注和资料。 |
-| 工程组织 | XcodeGen 管理 macOS 工程，Swift Package Manager 管理本地核心包与 Loro 依赖 | 用 project.yml 描述应用配置，锁定依赖版本。核心逻辑可用 XCTest 独立测试，编辑器交互在 macOS 应用中验证。[XcodeGen](https://github.com/yonaskolb/XcodeGen) |
+| 工程组织 | XcodeGen 生成 macOS 工程，SwiftPM 管理本地核心包，npm 锁定 BlockNote 和前端依赖 | `make build` 先生成离线资源，再把它们复制进 App。核心逻辑可以独立测试，编辑器交互在 WebKit 和浏览器中验证。[XcodeGen](https://github.com/yonaskolb/XcodeGen) |
 
 ## 模块与依赖
 
@@ -70,16 +78,16 @@ macOS 应用负责界面和外部服务，依赖本地 Swift 包 RedraftCore。�
 
 | 归属 | 模块 | 主要职责 | 直接依赖 |
 | --- | --- | --- | --- |
-| macOS 应用 | 编辑界面 | 提供流畅的正文编辑与段落标记体验，在原文上下文中呈现各轮改动。 | SwiftUI、AppKit、文章会话 |
-| RedraftCore | 文章会话 | 协调一篇文章的编辑、改稿、对比与保存。作者成稿时归档本轮的原文、批注与成稿结果。 | 文档与版本、文本对比、改稿服务接口、文章存储接口 |
-| RedraftCore | 文档与版本 | 管理正文、格式和版本历史，保留修改来源及同一段落在各稿中的对应关系，供作者追溯。 | Foundation、loro-swift |
-| RedraftCore | 文本对比（Diff） | 比较任意两稿，识别文字的新增、删除和替换，为界面提供改前、改后的文字及上下文。 | NaturalLanguage、Swift 标准库 |
-| macOS 应用 | AI 批注接入 | 现有演示向文章会话提供批注。计划引导作者建立专用写作会话，向 Agent 提供写作上下文并接收批注。 | 核心包的 `ReviewProviding`，外部工具接口待实现 |
-| macOS 应用 | 本地文章库 | 保存和恢复文章及其完整版本历史，提供文章列表与 Markdown 导出。 | 核心包的文章存储接口、Foundation |
+| macOS 应用 | 编辑界面 | 整篇正文编辑、段落标记和历史阅读。 | SwiftUI、AppKit、WebKit、随包 BlockNote、文章会话 |
+| RedraftCore | 文章会话 | 校验编辑与批注的基准版本，成稿时归档本轮的原文、批注及作者决定。 | 文档与版本、`ReviewProviding` |
+| RedraftCore | 文档与版本 | 保存块及表格的身份、语义富文本和版本快照，转换编辑页的块树。 | Foundation |
+| RedraftCore | 文本对比（Diff） | 定义两稿间的有序差异片段，具体比较器待实现。 | Swift 标准库 |
+| macOS 应用 | AI 批注接入 | 应用提供本地示例批注。作者可以把当前摘录复制到自己的会话。专用会话初始化、资料和批注回写属于后续功能。 | `ReviewProviding`、系统剪贴板 |
+| macOS 应用 | 本地文章库 | `WorkspaceStore` 汇集会话变更，SQLite 按文章事务保存正文、版本与取舍。Markdown 可随附件单独导出。 | 系统 SQLite、Foundation、Core 文档和历史类型 |
 
 ## 现有验证与适用边界
 
-macOS 临时小样已用 loro-swift 1.17.1 验证中文与 emoji 混排的下标换算、富文本标记、前文插字后的锚点位置、历史版本读取和快照重载。系统拼音的确认与取消、AppKit 撤销与正文历史的一致性、生成改稿版本后重开文章并回看段落差异，仍是应用级行为，尚未经过端到端验证。
+早期 macOS 小样用 loro-swift 1.17.1 验证过中文与 emoji 混排的下标换算、富文本标记、历史读取与快照重载。当前应用用 BlockNote 管理编辑撤销，用 Core 与 SQLite 恢复稿件和批注。自动测试覆盖浏览器组字及 WebKit 版本冲突，系统拼音候选窗的手动操作仍待实机核验。
 
 ## 早期工程骨架
 

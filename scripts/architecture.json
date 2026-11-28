@@ -1,6 +1,6 @@
 {
-  "reviewedAt": "2026-11-22",
-  "reviewedSourceHash": "7fdde5d5054e26a9389da8695d3522fdc88fa02b7924decef0767ee5e09d0787",
+  "reviewedAt": "2026-11-28",
+  "reviewedSourceHash": "bf4c51493a6814ed784b1fa5286e93b4a4dd21c28c72e0c9379e7c40c512ad65",
   "packageDependency": {
     "from": "App",
     "to": "RedraftCore",
@@ -13,36 +13,32 @@
       "subtitle": "RedraftApp",
       "layer": "app",
       "status": "implemented",
-      "summary": "SwiftUI 入口持有窗口 ViewModel，显式装配文章来源、改稿适配器与图片资源解析器。",
+      "summary": "SwiftUI 打开本机 SQLite 稿库，创建写作窗口和一张空稿纸，装配示例批注服务。",
       "files": [
         "App/RedraftApp.swift",
-        "project.yml",
-        "App/Preview/DemoWorkspaceContentSource.swift",
-        "App/Preview/DemoImageResolver.swift"
+        "project.yml"
       ],
       "symbols": [
-        "RedraftApp"
+        "RedraftApp",
+        "LibraryLifecycle"
       ],
       "done": [
-        "创建原生工作区和应用菜单",
-        "以 @StateObject 管理窗口 ViewModel 生命周期",
-        "从入口注入演示文章源、改稿服务与插画资源，处理初始文档校验失败"
+        "启动即进入正文，旧稿可在文章库中找回",
+        "窗口关闭、失焦与退出触发保存。打开失败时展示恢复提示，退出前可返回未保存的稿件"
       ],
-      "next": [
-        "用真实文章库与服务替换演示适配器"
-      ],
+      "next": [],
       "evidence": [
         {
           "file": "App/RedraftApp.swift",
           "needle": "struct RedraftApp: App"
         },
         {
-          "file": "project.yml",
-          "needle": "      - package: RedraftCore"
+          "file": "App/RedraftApp.swift",
+          "needle": "WorkspaceStore(libraryAt: SQLiteLibrary.location())"
         },
         {
-          "file": "App/Preview/DemoWorkspaceContentSource.swift",
-          "needle": "struct DemoWorkspaceContentSource: WorkspaceContentSource"
+          "file": "project.yml",
+          "needle": "path: WebEditor/dist"
         }
       ],
       "definition": "创建应用窗口，装配编辑界面和运行所需的服务。"
@@ -50,70 +46,67 @@
     {
       "id": "editor",
       "title": "编辑界面",
-      "subtitle": "SwiftUI · AppKit",
+      "subtitle": "BlockNote · WebKit · SwiftUI",
       "layer": "app",
       "status": "partial",
-      "summary": "原生稿纸提供连续输入和按需展开的排版；批注在对应内容块旁打开，段落轨迹可回看本轮及先前各轮取舍。",
+      "summary": "整篇正文使用随包的 BlockNote。原生窗口管理可选标题、批注检查器和历史，WebKit 保持输入、选区与撤销。",
       "files": [
-        "App/Editor/NativeRichText.swift",
         "App/Editor/WritingView.swift",
-        "App/Editor/FormattingToolbar.swift",
+        "App/Editor/BlockNoteEditor.swift",
+        "App/Editor/EditorImages.swift",
+        "App/Editor/DocumentImagePreview.swift",
+        "WebEditor/src/editor.tsx",
+        "WebEditor/src/schema.ts",
+        "WebEditor/src/view.tsx",
+        "WebEditor/src/media.ts",
+        "WebEditor/src/clipboard.ts",
+        "WebEditor/src/paper.css",
+        "WebEditor/index.html",
+        "WebEditor/package.json",
         "App/Workspace/WorkspaceView.swift",
         "App/Review/AnnotationPanel.swift",
         "App/Review/BlockTrailPanel.swift",
         "App/Review/InspectorView.swift",
         "App/Shared/PaperTheme.swift",
-        "App/Editor/ImageImport.swift",
-        "App/Editor/DocumentImagePreview.swift",
-        "Tests/EditorInteractionTests.swift",
-        "Tests/NativeUISnapshots.swift",
-        "App/Editor/WritingKeyboardNavigation.swift",
         "App/Platform/RichTextBridge.swift",
-        "App/Platform/EditorSession.swift",
-        "App/Editor/FormattingCommands.swift"
+        "Tests/EditorInteractionTests.swift",
+        "WebEditor/test/editor.test.mjs",
+        "Tests/NativeUISnapshots.swift"
       ],
       "symbols": [
         "WritingView",
-        "NativeRichText",
-        "FormattingToolbar",
+        "BlockNoteEditor",
+        "EditorImages",
+        "WritingSession",
         "AnnotationPanel",
-        "BlockTrailPanel",
-        "InspectorView",
-        "NativeMaterial",
-        "RichTextBridge",
-        "EditorSession"
+        "BlockTrailPanel"
       ],
       "done": [
-        "原生 TextKit 2 富文本输入、图表编辑与Core语义模型转换",
-        "窗口级输入会话和显式标题语义，工具栏读取派生状态",
-        "空稿正文首焦点、段旁批注、宽窄窗口同屏阅读、成稿取舍与段落轨迹",
-        "原生毛玻璃、深浅色与降低透明度适配",
-        "原生组字提交校验基准内容，冲突时恢复权威正文；连续输入立即推进基准"
+        "同一编辑器处理文本、列表、图片及表格，支持选区排版、粘贴、斜杠菜单和整篇撤销",
+        "组字确认后按文章与基准版本提交，保留既有批注的块身份",
+        "本地资源加载和图片导入，正文中的图片引用使用资源标识",
+        "读批注时高亮对应块，作者成稿后刷新正文"
       ],
       "next": [
-        "接入真实 Diff、逐句溯源与文档级撤销",
-        "接入跨块连续选区并验证系统输入法端到端操作"
+        "实机验证系统拼音候选窗的确认和取消",
+        "逐句差异和跨稿溯源"
       ],
       "evidence": [
         {
-          "file": "App/Editor/NativeRichText.swift",
-          "needle": "struct NativeRichText: NSViewRepresentable"
+          "file": "App/Editor/WritingView.swift",
+          "needle": "BlockNoteEditor(model:"
         },
         {
-          "file": "App/Workspace/WorkspaceView.swift",
-          "needle": "struct WorkspaceView: View"
+          "file": "App/Editor/BlockNoteEditor.swift",
+          "needle": "func synchronize(focusRequest:"
         },
         {
-          "file": "App/Shared/PaperTheme.swift",
-          "needle": "struct NativeMaterial: View"
+          "file": "WebEditor/src/editor.tsx",
+          "needle": "class WritingSession"
         },
         {
-          "file": "App/Platform/RichTextBridge.swift",
-          "needle": "enum RichTextBridge {"
-        },
-        {
-          "file": "App/Review/BlockTrailPanel.swift",
-          "needle": "struct BlockTrailPanel: View"
+          "file": "App/Editor/EditorImages.swift",
+          "needle": "func stage("
         }
       ],
       "definition": "承接正文输入与段落选择，展示稿件和修改差异。"
@@ -124,7 +117,7 @@
       "subtitle": "WorkspaceViewModel · MVVM",
       "layer": "app",
       "status": "implemented",
-      "summary": "Store 持有文章会话集合和范例；ViewModel 观察同一会话并派生展示，WorkspaceState 只保存窗口交互状态。",
+      "summary": "Store 连接会话和本机稿库。ViewModel 处理整篇正文提交、段落摘录和按正文检索，各窗口独立维护当前选区。",
       "files": [
         "App/Models/WorkspaceState.swift",
         "App/Models/WorkspaceStore.swift",
@@ -142,13 +135,12 @@
         "WorkspaceContentSource"
       ],
       "done": [
-        "文章会话集合和范例在Store中统一归属，正文不再复制进UI状态",
-        "只读文章投影、筛选和统计从会话派生；多个窗口可共享文档",
-        "文章来源通过协议注入，空源不自动填充示例",
-        "共享会话提交后校正各窗口失效的文章、选区、审阅与弹窗引用"
+        "创建空稿，按标题或任一块的正文检索，无标题稿在列表中用正文首行显示",
+        "共享会话提交后校正窗口中的文章、选区、审阅与弹窗引用",
+        "按文章 ID 与修订号校验整篇编辑，提供手动复制当前摘录的动作"
       ],
       "next": [
-        "装配真实文章库和保存恢复服务"
+        "按主题整理稿件并关联同一系列的文章"
       ],
       "evidence": [
         {
@@ -193,11 +185,11 @@
         "校验并提交内存文档更新，产生版本身份",
         "保存不可变历史快照并通知多个订阅者",
         "按文章、基准版本和请求身份处理改稿与取消",
-        "读批注时保持原文，按作者选择原子合稿并保留每轮源稿、建议和结果"
+        "读批注时保持原文，按作者选择原子合稿并保留每轮源稿、建议和结果",
+        "从本地库恢复历史、完成轮次和待处理取舍，正在运行的请求随进程结束"
       ],
       "next": [
-        "接入持久化、词级差异展示与 Loro 文档",
-        "依次等待每篇文章保存完成并提供恢复行为"
+        "逐句差异与跨稿定位"
       ],
       "evidence": [
         {
@@ -221,12 +213,17 @@
       "subtitle": "Article · DocumentBlock · RichTextContent",
       "layer": "core",
       "status": "partial",
-      "summary": "统一结构化文档、语义富文本和版本快照，App与Core使用同一数据契约；Loro和磁盘快照编解码仍未接入。",
+      "summary": "Core 用 UUID 管理正文、标记和历史。BlockNote 树按阅读顺序投影为内容块，保留父子关系、行内格式和表格身份。",
       "files": [
         "Packages/RedraftCore/Sources/RedraftCore/Document.swift",
         "Packages/RedraftCore/Sources/RedraftCore/RichText.swift",
         "Packages/RedraftCore/Sources/RedraftCore/Editing.swift",
-        "Packages/RedraftCore/Tests/RedraftCoreTests/EditingTests.swift"
+        "Packages/RedraftCore/Tests/RedraftCoreTests/EditingTests.swift",
+        "Packages/RedraftCore/Sources/RedraftCore/BlockNoteDocument.swift",
+        "Packages/RedraftCore/Sources/RedraftCore/BlockNoteInline.swift",
+        "Packages/RedraftCore/Sources/RedraftCore/BlockNoteTable.swift",
+        "Packages/RedraftCore/Sources/RedraftCore/BlockNoteJSON.swift",
+        "Packages/RedraftCore/Tests/RedraftCoreTests/BlockNoteDocumentTests.swift"
       ],
       "symbols": [
         "Article",
@@ -235,17 +232,18 @@
         "RichTextContent",
         "ArticleVersion",
         "TextEdit",
-        "ArticleEditing"
+        "ArticleEditing",
+        "BlockNoteDocument"
       ],
       "done": [
         "用带关联值的枚举表达文本、图片和表格，避免不匹配内容",
         "显式记录段落语义和文字样式，Core不依赖AppKit",
         "修改定位包含块ID，UTF-16范围明确相对于块内文本",
-        "校验文档身份、内容范围与表格行列身份；值语义隔离快照"
+        "校验文档身份、内容范围与表格行列身份；值语义隔离快照",
+        "在旧 Core 图文表与 BlockNote JSON 之间转换，保留可识别的块与单元格身份，拒绝不受支持的结构"
       ],
       "next": [
-        "接入Loro引擎与持久化快照恢复",
-        "在持久化版本之间恢复段落定位"
+        "跨版本逐句定位与差异"
       ],
       "evidence": [
         {
@@ -259,6 +257,14 @@
         {
           "file": "Packages/RedraftCore/Sources/RedraftCore/Editing.swift",
           "needle": "public protocol ArticleEditing"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/BlockNoteDocument.swift",
+          "needle": "public enum BlockNoteDocument"
+        },
+        {
+          "file": "Packages/RedraftCore/Sources/RedraftCore/BlockNoteTable.swift",
+          "needle": "func project(previous:"
         }
       ],
       "definition": "管理稿件、编辑选区和版本历史，支持修改与追溯。"
@@ -339,7 +345,7 @@
       "subtitle": "ArticleStorage",
       "layer": "core",
       "status": "interface",
-      "summary": "定义归档、读取和保存约定，当前没有磁盘存储实现。",
+      "summary": "保留 Core 的通用文章归档协议，约定一份快照及其 Markdown。当前 SQLite 稿库直接持久化会话的结构化数据。",
       "files": [
         "Packages/RedraftCore/Sources/RedraftCore/ArticleStorage.swift"
       ],
@@ -351,10 +357,7 @@
         "定义包含文章ID、版本ID、快照和Markdown的归档，约定表示来自同一版本",
         "约定读取缺失与失败、保存失败的数据保证"
       ],
-      "next": [
-        "由本地文章库实现存储协议",
-        "验证写入中断和重新打开后的历史"
-      ],
+      "next": [],
       "evidence": [
         {
           "file": "Packages/RedraftCore/Sources/RedraftCore/ArticleStorage.swift",
@@ -369,22 +372,35 @@
     },
     {
       "id": "ai",
-      "title": "AI 批注接入",
-      "subtitle": "外部 Agent",
+      "title": "Agent 与示例批注",
+      "subtitle": "按段摘录 · ReviewProviding",
       "layer": "adapters",
-      "status": "planned",
-      "summary": "外部 Agent 接入待实现，应用预览使用本地示例和措辞规则生成批注。",
-      "files": [],
-      "symbols": [],
-      "done": [],
+      "status": "partial",
+      "summary": "作者可以将选中摘录复制到自己的 Agent 会话。应用内示例通过 ReviewProviding 演示批注取舍。",
+      "files": [
+        "App/ViewModels/WorkspaceViewModel.swift",
+        "App/Preview/DemoWorkspaceContentSource.swift"
+      ],
+      "symbols": [
+        "agentExcerpt",
+        "DemoReviewProvider"
+      ],
+      "done": [
+        "复制当前选区或内容块、文章 ID、修订号、块 ID 和作者要求",
+        "本地示例可经审阅流程展示并由作者确认"
+      ],
       "next": [
         "提供写作上下文查询与批注提交接口",
         "验证初始化专用写作会话，以及换用工具后接续文章上下文"
       ],
       "evidence": [
         {
-          "file": "technical.md",
-          "needle": "| macOS 应用 | AI 批注接入 |"
+          "file": "App/ViewModels/WorkspaceViewModel.swift",
+          "needle": "func copyExcerptForAgent()"
+        },
+        {
+          "file": "App/Preview/DemoWorkspaceContentSource.swift",
+          "needle": "struct DemoReviewProvider: ReviewProviding"
         }
       ],
       "definition": "向外部 Agent 提供写作上下文，接收批注与查证资料。"
@@ -392,25 +408,43 @@
     {
       "id": "library",
       "title": "本地文章库",
-      "subtitle": "磁盘适配器",
+      "subtitle": "SQLite · Markdown 与附件",
       "layer": "adapters",
-      "status": "planned",
-      "summary": "保存完整文章归档，提供文章列表和恢复能力，目前只有设计。",
-      "files": [],
-      "symbols": [],
-      "done": [],
-      "next": [
-        "实现归档存储、枚举和读取",
-        "支持 Markdown 导出",
-        "验证重开文章与失败恢复"
+      "status": "implemented",
+      "summary": "SQLite 在本机按文章事务保存正文、图表和审阅历史。普通编辑仅重写变更块。Markdown 可连同本地附件导出。",
+      "files": [
+        "App/Models/SQLiteLibrary.swift",
+        "App/Models/WorkspaceStore.swift",
+        "App/Editor/MarkdownExport.swift",
+        "Tests/LibraryPersistenceTests.swift"
       ],
+      "symbols": [
+        "SQLiteLibrary",
+        "LibraryArticle",
+        "WorkspaceStore",
+        "MarkdownExport"
+      ],
+      "done": [
+        "空稿动笔后自动收录，退出重开能恢复版本、批注取舍及范例",
+        "事务失败保留上一版，更改仍可重试；过期写入与删除会检查提交身份",
+        "损坏或不认识的库显示错误，导出目录同名时分别保存"
+      ],
+      "next": [],
       "evidence": [
         {
-          "file": "technical.md",
-          "needle": "| macOS 应用 | 本地文章库 |"
+          "file": "App/Models/SQLiteLibrary.swift",
+          "needle": "func save(_ article: LibraryArticle"
+        },
+        {
+          "file": "App/Models/WorkspaceStore.swift",
+          "needle": "func flush() throws"
+        },
+        {
+          "file": "App/Editor/MarkdownExport.swift",
+          "needle": "func write(_ markdown:"
         }
       ],
-      "definition": "实现存储协议，管理本地文章文件、导出与恢复。"
+      "definition": "维护本机文章库的完整性，提供恢复、保存、删除与可携带附件的导出。"
     }
   ],
   "edges": [
@@ -431,7 +465,7 @@
       "label": "装配界面",
       "evidence": {
         "file": "App/RedraftApp.swift",
-        "needle": "WorkspaceView(model: model)"
+        "needle": "WorkspaceView(model: workspace.model)"
       }
     },
     {
@@ -440,8 +474,8 @@
       "kind": "actual",
       "label": "共享会话并观察变化",
       "evidence": {
-        "file": "App/Models/WorkspaceStore.swift",
-        "needle": "document: item.document, versions: item.versions,"
+        "file": "App/ViewModels/WorkspaceViewModel.swift",
+        "needle": "try session.updateDocument(basedOn: revision)"
       }
     },
     {
@@ -471,31 +505,19 @@
       }
     },
     {
-      "from": "session",
-      "to": "storage",
-      "kind": "planned",
-      "label": "保存与恢复"
-    },
-    {
       "from": "ai",
       "to": "rewrite",
       "kind": "planned",
       "label": "交回批注"
     },
     {
-      "from": "library",
-      "to": "storage",
-      "kind": "planned",
-      "label": "实现协议"
-    },
-    {
       "from": "app",
       "to": "workspace",
       "kind": "actual",
-      "label": "装配窗口ViewModel与数据源",
+      "label": "装配窗口状态和批注服务",
       "evidence": {
         "file": "App/RedraftApp.swift",
-        "needle": "@StateObject private var model"
+        "needle": "let model = WorkspaceViewModel("
       }
     },
     {
@@ -516,6 +538,36 @@
       "evidence": {
         "file": "App/Preview/DemoWorkspaceContentSource.swift",
         "needle": "struct DemoReviewProvider: ReviewProviding"
+      }
+    },
+    {
+      "from": "workspace",
+      "to": "library",
+      "kind": "actual",
+      "label": "载入和保存本机稿件",
+      "evidence": {
+        "file": "App/Models/WorkspaceStore.swift",
+        "needle": "try library.save(article, replacing:"
+      }
+    },
+    {
+      "from": "library",
+      "to": "document",
+      "kind": "actual",
+      "label": "持久化结构化内容块",
+      "evidence": {
+        "file": "App/Models/SQLiteLibrary.swift",
+        "needle": "decoder.decode(DocumentBlock.self"
+      }
+    },
+    {
+      "from": "editor",
+      "to": "document",
+      "kind": "actual",
+      "label": "按内容块身份重建编辑正文",
+      "evidence": {
+        "file": "App/Editor/BlockNoteEditor.swift",
+        "needle": "let next = try BlockNoteDocument.decode("
       }
     }
   ]

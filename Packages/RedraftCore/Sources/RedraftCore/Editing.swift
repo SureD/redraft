@@ -19,7 +19,7 @@ public struct TextEdit: Equatable, Sendable {
   }
 }
 
-public enum EditSource: Equatable, Sendable { case author, ai }
+public enum EditSource: Equatable, Codable, Sendable { case author, ai }
 
 /// A future persistent document engine exposes the same snapshots as ArticleSession.
 public protocol ArticleEditing {

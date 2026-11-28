@@ -4,6 +4,10 @@
 
 | 日期 | 模块或主题 | 摘要 |
 | --- | --- | --- |
+| 2026-11-28 | 写作 / 文档 / 本地文章库 | [以随包 BlockNote 替换自绘编辑器，打通本机写稿、找稿与按段交给助手](2026-11-28-blocknote-client.md) |
+| 2026-11-28 | 写作 / 客户端选型 | [直接用思源写稿，或用 BlockNote 保留 Redraft 窗口：成品、维护证据与试写方法](2026-11-28-writing-client-options.md) |
+| 2026-11-22 | 原生 UI / 写作 | [最低部署版本升至 macOS 26，用系统富文本 TextEditor 编辑连续正文](2026-11-22-swiftui-text-editor.md) |
+| 2026-11-22 | 原生 UI / 写作组件选型 | [核对 Apple 备忘录可复用的能力，比较 macOS 14 上的 MarkupEditor 与 BlockNote](2026-11-22-writing-editor-survey.md) |
 | 2026-11-22 | 开发流程 / 原生 UI | [移除网页原型，直接在可运行的 Swift 应用中迭代交互](2026-11-22-swift-prototype.md) |
 | 2026-11-22 | 原生 UI / 批注成稿 | [从空白稿纸写起，在段落旁读批注，采用后查看这一轮的改稿轨迹](2026-11-22-companion-writing.md) |
 | 2026-11-19 | 原生 UI / 写作 | [光标随字号变化，从空标题直接写到正文，点击图表下方可续写](2026-11-19-writing-panel.md) |

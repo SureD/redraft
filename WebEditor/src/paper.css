@@ -1,0 +1,43 @@
+:root {
+  color-scheme: light dark;
+  --paper: #fbfaf6;
+  --ink: #1d1c1a;
+  --mark: #1667d9;
+  --gutter: 52px; /* matches the native title's inset when the window narrows */
+  --ui-font: -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #1e1e1d; --ink: #edebe7; --mark: #2f86f6; }
+}
+html, body { margin: 0; min-height: 100%; background: var(--paper); color: var(--ink); }
+body { font-family: var(--ui-font); }
+.redraft-paper.bn-root {
+  --bn-colors-editor-background: var(--paper);
+  --bn-colors-editor-text: var(--ink);
+  --bn-font-family: var(--ui-font);
+}
+.redraft-paper .bn-editor {
+  box-sizing: content-box;
+  max-width: 692px;
+  min-height: calc(100vh - 100px);
+  margin: 0 auto;
+  padding: 6px var(--gutter) 88px;
+  font-family: var(--ui-font);
+  font-size: 17px;
+  caret-color: var(--mark);
+  overflow-wrap: anywhere;
+}
+.redraft-paper .bn-block-outer { line-height: 1.74; }
+.redraft-paper .bn-block-content { padding-block: 4px; }
+.redraft-paper .bn-block-content[data-content-type="heading"] { line-height: 1.35; }
+.redraft-paper .bn-visual-media { max-width: 100%; height: auto; }
+.redraft-paper .bn-trailing-block:hover::before {
+  content: "点击继续写作";
+  font-size: 13px;
+  line-height: 30px;
+  color: color-mix(in srgb, var(--ink) 58%, transparent);
+}
+.redraft-paper { --review-fill: color-mix(in srgb, var(--mark) 9%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .redraft-paper *, .redraft-paper *::before, .redraft-paper *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
+}

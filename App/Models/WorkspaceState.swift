@@ -1,7 +1,6 @@
 import Foundation
 
 enum WorkspaceSection: String, CaseIterable { case articles, examples }
-enum WritingEdge { case start, end }
 enum InspectorTab: String, CaseIterable { case marks, annotations, provenance }
 enum ArticlePhase: String { case idle, running, ready }
 enum ExampleFilter: String, CaseIterable {
@@ -16,7 +15,7 @@ enum ExampleFilter: String, CaseIterable {
   }
 }
 enum WorkspaceSheet: String, Identifiable {
-  case customMark, rewrite, shortcuts, statistics, about, insertTable, imageDescription
+  case customMark, rewrite, shortcuts, statistics, about
   var id: String { rawValue }
 }
 
@@ -25,7 +24,6 @@ struct WorkspaceState {
   var selectedArticleID: UUID? = nil
   var section: WorkspaceSection = .articles
   var sidebarVisible: Bool = false
-  var formattingVisible: Bool = false
   var inspectorVisible: Bool = false
   var inspectorTab: InspectorTab = .marks
   var articleQuery: String = ""
@@ -40,7 +38,4 @@ struct WorkspaceState {
   var customInstruction: String = ""
   var rewriteText: String = ""
   var rewriteReason: String = ""
-  var imageDescription: String = ""
-  var tableRows: Int = 3
-  var tableColumns: Int = 3
 }

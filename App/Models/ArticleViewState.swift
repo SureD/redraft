@@ -11,7 +11,15 @@ struct ArticleViewState: Identifiable {
   var id: UUID { document.id }
   var title: String { document.title }
   var displayTitle: String {
-    title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名文章" : title
+    if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return title }
+    // A library of untitled drafts should still be recognizable without opening each one.
+    for block in blocks where block.kind == .text {
+      for raw in block.plainText.split(whereSeparator: \.isNewline) {
+        let line = raw.trimmingCharacters(in: .whitespaces)
+        if !line.isEmpty { return String(line.prefix(36)) }
+      }
+    }
+    return "未命名文章"
   }
   var updatedAt: Date { document.updatedAt }
   var blocks: [DocumentBlock] { document.blocks }

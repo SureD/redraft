@@ -13,10 +13,8 @@ struct WorkspaceCommands: Commands {
     CommandMenu("工作区") {
       Button("文章库") { model.state.sidebarVisible.toggle() }
         .keyboardShortcut("s", modifiers: [.command, .control])
-      Button("排版工具栏") { model.state.formattingVisible.toggle() }
-        .disabled(model.isEditorLocked)
       Divider()
-      Button(model.currentArticle?.phase == .ready ? "阅读本轮批注" : "请 AI 批注") {
+      Button(model.currentArticle?.phase == .ready ? "阅读本轮批注" : "试读示例批注") {
         if model.currentArticle?.phase == .ready {
           model.enterReview()
         } else {

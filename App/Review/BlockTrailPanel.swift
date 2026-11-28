@@ -26,7 +26,7 @@ struct BlockTrailPanel: View {
       .frame(maxWidth: .infinity, alignment: .leading).padding(18)
     }
     .id(selectedRoundID ?? block?.id)
-    .onChange(of: block?.id) { _ in selectedRoundID = nil }
+    .onChange(of: block?.id) { selectedRoundID = nil }
   }
 
   @ViewBuilder private func blockTrail(_ block: DocumentBlock) -> some View {

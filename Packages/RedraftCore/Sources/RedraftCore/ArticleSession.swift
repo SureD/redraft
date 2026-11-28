@@ -1,37 +1,48 @@
 import Foundation
 
 /// One open article's writable owner. Views observe immutable value snapshots from this session.
-/// Document edits and accepted annotation rounds are held in memory.
 @MainActor
 public final class ArticleSession {
   public private(set) var document: Article
   public private(set) var versions: [ArticleVersion]
-  public private(set) var rounds: [AnnotationRound] = []
+  public private(set) var rounds: [AnnotationRound]
   public private(set) var review: ReviewState
 
   private var observers: [UUID: @MainActor () -> Void] = [:]
   private var reviewTask: Task<Void, Never>?
 
   public init(
-    document: Article, versions: [ArticleVersion] = [], review: ReviewState = .idle
+    document: Article, versions: [ArticleVersion] = [], rounds: [AnnotationRound] = [],
+    review: ReviewState = .idle
   ) throws {
     let document = document.normalized()
     let review: ReviewState = {
       if case .ready(let batch) = review { .ready(batch.normalized()) } else { review }
     }()
     try document.validate()
-    guard Set(versions.map(\.id)).count == versions.count else {
-      throw EditingError.invalidDocument
-    }
+    guard Set(versions.map(\.id)).count == versions.count,
+      Set(rounds.map(\.id)).count == rounds.count
+    else { throw EditingError.invalidDocument }
     var revisions = [document.revisionID: document]
-    for version in versions {
-      guard version.document.id == document.id else { throw EditingError.invalidDocument }
-      try version.document.validate()
+    func checkSnapshot(_ snapshot: Article) throws {
+      guard snapshot.id == document.id else { throw EditingError.invalidDocument }
+      try snapshot.validate()
       // Snapshot labels may differ; a revision identity must always resolve to one document value.
-      if let existing = revisions[version.revisionID], existing != version.document {
+      if let existing = revisions[snapshot.revisionID], existing != snapshot {
         throw EditingError.invalidDocument
       }
-      revisions[version.revisionID] = version.document
+      revisions[snapshot.revisionID] = snapshot
+    }
+    for version in versions { try checkSnapshot(version.document) }
+    for round in rounds {
+      try checkSnapshot(round.source)
+      try checkSnapshot(round.result)
+      guard !round.changes.isEmpty, round.changes.allSatisfy({ $0.decision != nil }) else {
+        throw EditingError.invalidReview
+      }
+      try ReviewBatch(
+        articleID: document.id, baseRevisionID: round.source.revisionID, changes: round.changes
+      ).validate(against: round.source)
     }
     switch review {
     case .ready(let batch): try batch.validate(against: document)
@@ -40,6 +51,7 @@ public final class ArticleSession {
     }
     self.document = document
     self.versions = versions
+    self.rounds = rounds
     self.review = review
   }
 

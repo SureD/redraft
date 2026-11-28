@@ -64,7 +64,7 @@ struct InspectorView: View {
         VStack(alignment: .leading, spacing: 18) {
           if article.marks.isEmpty {
             Text("全文").font(.headline)
-            Text("也可以在段落的快捷菜单中标记想讨论的地方。")
+            Text("把光标放在想讨论的段落，在「更多」中选择「批注这段…」。")
               .font(.callout).foregroundStyle(.secondary).lineSpacing(4)
           } else {
             Text("已标记 \(article.marks.count) 处").font(.subheadline).foregroundStyle(.secondary)

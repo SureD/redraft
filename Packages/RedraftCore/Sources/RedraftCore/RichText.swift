@@ -1,11 +1,11 @@
 import Foundation
 
-public enum TextColor: Equatable, Sendable {
+public enum TextColor: Hashable, Codable, Sendable {
   case primary, secondary, accent, highlight
   case rgba(Double, Double, Double, Double)
 }
 
-public struct TextStyle: Equatable, Sendable {
+public struct TextStyle: Hashable, Codable, Sendable {
   public var fontFamily: String?
   public var fontSize: Double?
   public var bold: Bool
@@ -31,16 +31,16 @@ public struct TextStyle: Equatable, Sendable {
   }
 }
 
-public enum ParagraphKind: Equatable, Sendable {
+public enum ParagraphKind: Hashable, Codable, Sendable {
   case body
   case heading(level: Int)
 }
-public enum TextAlignment: String, Equatable, Sendable {
+public enum TextAlignment: String, Equatable, Codable, Sendable {
   case natural, left, center, right, justified
 }
-public enum ListMarker: String, Equatable, Sendable { case bullet, decimal }
+public enum ListMarker: String, Equatable, Codable, Sendable { case bullet, decimal }
 
-public struct ListStyle: Equatable, Sendable {
+public struct ListStyle: Hashable, Codable, Sendable {
   public var marker: ListMarker
   public var startingItemNumber: Int
 
@@ -50,7 +50,7 @@ public struct ListStyle: Equatable, Sendable {
   }
 }
 
-public struct ParagraphStyle: Equatable, Sendable {
+public struct ParagraphStyle: Hashable, Codable, Sendable {
   public var kind: ParagraphKind
   public var alignment: TextAlignment
   public var headIndent: Double
@@ -81,7 +81,7 @@ public struct ParagraphStyle: Equatable, Sendable {
   }
 }
 
-public struct RichTextRun: Equatable, Sendable {
+public struct RichTextRun: Equatable, Codable, Sendable {
   public var range: NSRange
   public var style: TextStyle
   public var paragraphStyle: ParagraphStyle
@@ -93,7 +93,7 @@ public struct RichTextRun: Equatable, Sendable {
   }
 }
 
-public struct RichTextContent: Equatable, Sendable {
+public struct RichTextContent: Equatable, Codable, Sendable {
   public var string: String
   public var runs: [RichTextRun]
   public var defaultStyle: TextStyle

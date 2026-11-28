@@ -8,7 +8,6 @@ struct WorkspaceStateTests {
   @MainActor
   static func main() async throws {
     try articleSelectionAndDeletion()
-    try writingAtDocumentEdges()
     try unicodeSelectionAndMarking()
     try reviewDecisions()
     try partialAndBulkAdoption()
@@ -19,6 +18,7 @@ struct WorkspaceStateTests {
     try await writingThroughAdoption()
     try await unknownTextDoesNotInventSuggestions()
     try injectedSourcesAndSharedOwnership()
+    try documentEditsAcrossWindows()
     try await sharedReviewLifecycle()
     try sharedReferencesStayValid()
     try await injectedReviewResultsAndFailures()
@@ -37,13 +37,15 @@ struct WorkspaceStateTests {
       model.state.selectedBlockID == nil && model.state.sheet == nil,
       "Changing articles must clear selection and presented edits")
     try expect(model.state.customInstruction.isEmpty, "Sheet drafts must not leak across articles")
-    model.updateBlockText(original.blocks[0].id, text: NSAttributedString(string: "错误修改"))
+    try expect(
+      !model.commitEditorBlocks(
+        [DocumentBlock()], articleID: original.id, basedOn: original.document.revisionID),
+      "A late change from the old page must be rejected")
     try expect(
       model.articles[0].blocks[0].text == original.blocks[0].text,
       "A stale editor callback must not mutate another article")
     model.state.sidebarVisible = true
     model.state.inspectorVisible = true
-    model.state.formattingVisible = true
     model.newArticle()
     let created = model.currentArticle!.id
     try expect(
@@ -51,7 +53,7 @@ struct WorkspaceStateTests {
         && model.state.selectedBlockID == model.currentArticle?.blocks.first?.id,
       "A new article must start in its empty body and use a fallback name only for display")
     try expect(
-      !model.state.formattingVisible && !model.state.inspectorVisible && !model.state.sidebarVisible
+      !model.state.inspectorVisible && !model.state.sidebarVisible
         && !model.canRequestAnnotations,
       "Blank writing must have no open panels, formatting row, or annotation request")
     model.state.articleQuery = "未命名"
@@ -66,42 +68,26 @@ struct WorkspaceStateTests {
   }
 
   @MainActor
-  private static func writingAtDocumentEdges() throws {
-    let image = DocumentBlock(image: ImageContent(altText: "草图"))
-    let table = DocumentBlock(table: TableContent(rows: [["数据"]]))
-    let model = try TestSupport.model(articles: [Article(title: "", blocks: [image, table])])
-    model.selectBlock(image.id)
-    guard let end = model.writingBlock(at: .end), let start = model.writingBlock(at: .start) else {
-      throw TestFailure(message: "Both edges of an attachment-only document must accept typing")
-    }
-    let revision = model.currentArticle?.document.revisionID
-    try expect(
-      start.kind == .text && end.kind == .text
-        && model.currentArticle?.blocks == [start, image, table, end],
-      "Writing at an edge must leave existing attachments in order regardless of selection")
-    try expect(
-      model.writingBlock(at: .start)?.id == start.id && model.writingBlock(at: .end)?.id == end.id
-        && model.currentArticle?.document.revisionID == revision,
-      "Returning to an existing edge paragraph must reuse it without editing the article")
-    model.showExamples()
-    try expect(model.writingBlock(at: .end) == nil, "A locked article cannot be continued")
-  }
-
-  @MainActor
   private static func unicodeSelectionAndMarking() throws {
     let block = DocumentBlock(text: RichTextContent(string: "写👩🏽‍💻稿"))
-    let article = Article(title: "边界", blocks: [block])
+    let article = Article(title: "", blocks: [block])
     let model = try TestSupport.model(articles: [article])
     let valid = NSRange(location: 1, length: "👩🏽‍💻".utf16.count)
     model.updateSelection(blockID: block.id, range: valid)
     model.updateSelection(blockID: block.id, range: NSRange(location: 2, length: 1))
     try expect(model.state.selectedRange == valid, "Selections cannot split composed characters")
+    try expect(
+      model.agentExcerpt?.hasSuffix("👩🏽‍💻") == true
+        && model.agentExcerpt?.contains(article.revisionID.uuidString) == true
+        && model.agentExcerpt?.contains("写👩🏽‍💻稿") == false,
+      "An explicit Agent excerpt contains exactly the selected text and identifies its source revision"
+    )
     model.markSelection(instruction: "更具体")
     try expect(model.currentArticle?.marks[block.id] == "更具体", "Marking uses the selected block")
     model.unmarkBlock(block.id)
     try expect(model.markedCount == 0, "Unmarking must update the same source of truth")
     model.markSelection(instruction: "更简洁")
-    model.deleteBlock(block.id)
+    TestSupport.edit(model) { $0 = [DocumentBlock()] }
     try expect(
       model.markedCount == 0 && model.state.selectedBlockID == nil,
       "Deleting a block must remove its marks and selection")
@@ -235,8 +221,8 @@ struct WorkspaceStateTests {
     model.state.rewriteText = "迟到的提交"
     model.submitRewrite()
     try expect(model.currentChange?.decision == nil, "Dismissed rewrite submissions are ignored")
-    model.showSheet(.insertTable)
-    try expect(model.state.sheet == nil, "Locked review content cannot open an insert sheet")
+    model.showSheet(.customMark)
+    try expect(model.state.sheet == nil, "Locked review content cannot open a mark sheet")
   }
 
   @MainActor
@@ -345,7 +331,7 @@ struct WorkspaceStateTests {
     let paragraph = model.selectedBlock!
     let draft = "院子里的薄荷长得非常非常慢。"
     let adopted = "院子里的薄荷长得非常慢。"
-    model.updateBlockText(paragraph.id, text: NSAttributedString(string: draft))
+    TestSupport.replaceText(model, paragraph.id, draft)
     try expect(
       model.canRequestAnnotations && model.markedCount == 0 && !model.state.inspectorVisible,
       "A writer can request annotations directly after ordinary typing")
@@ -375,7 +361,7 @@ struct WorkspaceStateTests {
     let model = try TestSupport.demoModel()
     model.newArticle()
     let block = model.currentArticle!.blocks[0]
-    model.updateBlockText(block.id, text: NSAttributedString(string: "今天去看海。"))
+    TestSupport.replaceText(model, block.id, "今天去看海。")
     model.markBlock(block.id, instruction: "更简洁")
     model.beginReview()
     try await Task.sleep(for: .milliseconds(1300))
@@ -410,7 +396,7 @@ struct WorkspaceStateTests {
     let snapshot = store.session(for: original.id)!.saveVersion(title: "初稿")
     let initialRevision = original.revisionID
     first.renameArticle("修改后的标题")
-    first.updateBlockText(original.blocks[0].id, text: NSAttributedString(string: "新的正文"))
+    TestSupport.replaceText(first, original.blocks[0].id, "新的正文")
     try expect(
       second.currentArticle?.title == "修改后的标题"
         && second.currentArticle?.blocks.first?.plainText == "新的正文",
@@ -434,6 +420,39 @@ struct WorkspaceStateTests {
     try expect(
       second.articles.isEmpty && second.currentArticle == nil,
       "Deleting a shared article must invalidate every derived view")
+  }
+
+  @MainActor
+  private static func documentEditsAcrossWindows() throws {
+    let first = DocumentBlock(text: RichTextContent(string: "薄荷"))
+    let second = DocumentBlock(text: RichTextContent(string: "罗勒"))
+    let image = DocumentBlock(image: ImageContent(caption: "阳台"))
+    let article = Article(
+      title: "香草", blocks: [first, second, image], marks: [second.id: "写具体些"])
+    let store = try WorkspaceStore(seed: WorkspaceSeed(articles: [ArticleSeed(document: article)]))
+    let writer = WorkspaceViewModel(store: store, reviewProvider: NoReviewProvider())
+    let peer = WorkspaceViewModel(store: store, reviewProvider: NoReviewProvider())
+    let before = writer.currentArticle!.document
+    TestSupport.edit(peer) { $0[2].image?.caption = "清晨的阳台" }
+    let merged = DocumentBlock(id: first.id, text: RichTextContent(string: "薄荷和罗勒"))
+    try expect(
+      !writer.commitEditorBlocks(
+        [merged, image], articleID: before.id, basedOn: before.revisionID),
+      "Stale whole-page input cannot overwrite another window's photo change")
+    let latest = writer.currentArticle!.document
+    let updatedImage = latest.blocks[2]
+    try expect(
+      writer.commitEditorBlocks(
+        [merged, updatedImage], articleID: latest.id, basedOn: latest.revisionID)
+        && peer.currentArticle?.marks[second.id] == nil
+        && peer.currentArticle?.blocks.last?.image?.caption == "清晨的阳台",
+      "A fresh transaction replaces the page once and removes only missing block marks")
+    let joined = writer.currentArticle!.document
+    try expect(
+      writer.commitEditorBlocks(
+        [first, second, updatedImage], articleID: joined.id, basedOn: joined.revisionID)
+        && peer.currentArticle?.marks[second.id] == "写具体些",
+      "Undo restores a surviving block's scope by ID")
   }
 
   @MainActor
@@ -466,13 +485,13 @@ struct WorkspaceStateTests {
     let first = WorkspaceViewModel(store: store, reviewProvider: NoReviewProvider())
     let second = WorkspaceViewModel(store: store, reviewProvider: NoReviewProvider())
     second.selectBlock(image.id)
-    second.showSheet(.imageDescription)
-    first.deleteBlock(image.id)
+    second.showSheet(.customMark)
+    TestSupport.edit(first) { $0.removeAll { $0.id == image.id } }
     try expect(
       second.state.selectedBlockID == nil && second.state.sheet == nil,
       "Removing a shared block must close editors targeting that block")
     second.updateSelection(blockID: paragraph.id, range: NSRange(location: 2, length: 4))
-    first.updateBlockText(paragraph.id, text: NSAttributedString(string: "短"))
+    TestSupport.replaceText(first, paragraph.id, "短")
     try expect(
       second.state.selectedRange == NSRange(location: 1, length: 0),
       "External text changes must repair a now-invalid local selection")

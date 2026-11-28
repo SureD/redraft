@@ -4,20 +4,19 @@ Redraft 是一款原生 macOS 伴随式写作编辑器。先写正文，再请 A
 
 ## 运行 Swift 原型
 
-运行 `make run` 即可在空稿中输入。从「文章库」可打开示例，《给新同事的一封信》带有一轮可读批注，《阳台的一年》含图片与表格。
+运行 `make run`，在空稿正文直接输入，不必填标题或先建分类。用 `/` 插入标题、清单、图片和表格，选中文字再排版。草稿自动保存到本机文章库；退出重开，用 `⌃⌘S` 打开文章库，输入正文中的一句话即可找回。未命名文章用首行文字显示在列表里。未动笔的启动空稿不会写入数据库。
 
-在正文输入「院子里的薄荷长得非常非常慢。」，点「请 AI 批注」。收到意见后点段落旁的批注标记，或从工具栏打开本轮批注。选用一条建议、保留原文或自己改写后，再明确成稿。也可以一次采用其余建议。段落菜单中的轨迹可回看原文、AI 建议和作者的取舍。
+整篇正文由[开源 BlockNote](https://github.com/TypeCellOS/BlockNote) 编辑；窗口、文章库、批注和改稿历史仍是原生 Mac 客户端。编辑器和样式随 App 发布，不需要 Node 运行时、CDN 或本地服务器。插图只从本地导入。在「更多 → 导出 Markdown 和附件…」里选择目录，可同时带走正文及图片；Markdown 是交换格式，不用来恢复批注与历史。
 
-图片支持文件选择、粘贴和拖入；表格可增删行列、切换表头，并用 Tab 和方向键在单元格之间移动。正文提供混合格式状态和原生撤销，选中整张图片或表格后可用 Delete 删除。当前正文按内容块编辑，跨块连续选区与统一文档级撤销尚未实现。
+要试批注流程，可写「院子里的薄荷长得非常非常慢。」再点「试读示例批注」。应用会给出一条本地示例建议，你确认成稿后才会改动原文。要用自己的助手，可点「更多 → 复制摘录给 Agent」，把当前段落或选中的文字、文章 ID、版本、块 ID 和批注要求粘贴到自己的会话。
 
 - Core 的 `Article`、`DocumentBlock`、语义富文本、版本和审阅类型是统一数据契约；`ArticleSession` 持有一篇文章的当前文档、版本快照、本轮批注和历轮成稿，文档修改只能经会话提交。标题、图片、表格、格式和标记均属于同一份文档状态。
 - `WorkspaceStore` 持有文章会话集合和改写范例；`WorkspaceViewModel` 观察 Store，计算只读 `ArticleViewState`、筛选结果与统计。`WorkspaceState` 只保存当前窗口的选择、搜索、侧栏与弹窗草稿，不再复制正文。
-- 原生 TextKit 2 编辑器通过 `RichTextBridge` 在 Core 语义富文本与 `NSAttributedString` 之间转换。标题有显式语义，原生焦点和输入属性由窗口级 `EditorSession` 管理；输入法组字缓冲仍留在原生控件中；提交时校验基准内容，避免旧缓冲覆盖已更新正文。
-- 文章来源、改稿服务与图片资源在应用入口显式注入。默认装配 `DemoWorkspaceContentSource`、`DemoReviewProvider` 和 `DemoImageResolver`，固定稿件、示例改稿与插画都位于 `App/Preview`。替换或使用空文章源不需要修改 ViewModel，也不会自动回退到示例数据。
-- 侧栏、工具栏和检查器使用 `NSVisualEffectView` 原生毛玻璃，跟随系统深浅色和窗口激活状态；降低透明度或提高对比度时回退到不透明背景。正文始终保留纸面底色。
-- 文章、批注和轨迹保存在本次运行的内存里。当前批注来自本地演示，真实模型服务、磁盘保存和导出仍待接入。
+- `BlockNoteDocument` 在编辑页结构与带 ID 的 Core 文档之间转换。正文、附件和批注决策由文章会话负责；只有明确选择的新稿或外部正文更新才会重建编辑页。
+- 本地数据库默认在 `~/Library/Application Support/Redraft/Library.sqlite3`，开发时可用环境变量 `REDRAFT_LIBRARY_PATH` 指定独立的绝对文件路径。生产启动不填充示例稿；演示文章、插画和改稿规则在 `App/Preview` 中供注入与测试。
+- 真实 Agent 接入、后台查证和自动归类仍待实现。原生侧栏和检查器跟随系统深浅色，写作时默认收起。
 
-界面与交互直接在 SwiftUI / AppKit 实现中迭代，运行当前构建即可体验最新设计。[开发流程](devflow.md)
+[开发流程](devflow.md)
 
 ## 数据与状态入口
 
@@ -27,7 +26,9 @@ Redraft 是一款原生 macOS 伴随式写作编辑器。先写正文，再请 A
 | `Packages/RedraftCore/Sources/RedraftCore/RichText.swift` | 语义段落、文字样式与块内 UTF-16 范围 |
 | `Packages/RedraftCore/Sources/RedraftCore/Review.swift` | 改稿请求、基准版本、批注、作者决定和成稿轮次 |
 | `Packages/RedraftCore/Sources/RedraftCore/ArticleSession.swift` | 一篇文章的唯一文档修改入口和会话生命周期 |
-| `App/Models/WorkspaceStore.swift` | 文章会话集合与改写范例的所有者 |
+| `WebEditor/src/editor.tsx` 与 `App/Editor/BlockNoteEditor.swift` | 整篇编辑器、组字与原生提交 |
+| `Packages/RedraftCore/Sources/RedraftCore/BlockNoteDocument.swift` | 块树与现有文字、图片、表格及其身份之间的转换 |
+| `App/Models/WorkspaceStore.swift` 与 `App/Models/SQLiteLibrary.swift` | 文章会话及改写范例的所有者，本机事务保存与恢复 |
 | `App/Models/WorkspaceState.swift` | 窗口交互状态，不存文章正文 |
 | `App/Models/ArticleViewState.swift` | 从会话产生的只读界面投影 |
 | `App/Models/WorkspaceContentSource.swift` | 初始文章来源的注入接口 |
@@ -35,12 +36,13 @@ Redraft 是一款原生 macOS 伴随式写作编辑器。先写正文，再请 A
 
 ## 本地开发
 
-使用 Xcode 16 或更高版本，以便直接运行 Swift 格式检查。将 Xcode 设为当前开发工具。使用 Homebrew 安装 XcodeGen（`brew install xcodegen`）。App 的最低部署版本为 macOS 13。
+需要 macOS 26+、Xcode 26+、XcodeGen、Node.js 22+ 与 npm。将 Xcode 设为当前开发工具。首次 `make run` 按 `WebEditor/package-lock.json` 安装构建依赖，需要网络；构建好的 `.app` 可离线使用。无需启动 Web 服务。
 
 在仓库根目录运行以下命令。
 
 | 命令 | 用途 |
 | --- | --- |
+| `make web-editor` | 按锁文件打包本地 JS、CSS 与第三方许可证 |
 | `make project` | 从 `project.yml` 生成 `Redraft.xcodeproj`，可用 Xcode 打开 |
 | `make build` | 生成工程并构建 Debug 版 App |
 | `make run` | 构建并打开 Redraft 窗口 |
@@ -48,8 +50,10 @@ Redraft 是一款原生 macOS 伴随式写作编辑器。先写正文，再请 A
 | `make monitor` | 启动本机需求运行看板，查看 Agent 分工、待决策事项和验收记录 |
 | `make test` | 验证 Core 文档不变量、版本与审阅状态、异步取消和过期结果隔离 |
 | `make test-ui` | 验证注入数据源、共享会话、窗口状态隔离、批注阅读及成稿 |
-| `make test-editor` | 验证混合格式、原生撤销、组字保护与表格单元格边界 |
-| `make snapshots` | 渲染真实原生视图，检查 TextKit 2 / 材质并输出深浅色和窄窗截图到 `.build/ui-snapshots` |
+| `make test-editor` | 在真实 WKWebView 中验证首焦点、编辑、撤销、组字冲突、图表和 Markdown 导出 |
+| `npm --prefix WebEditor test` | 对打包资源运行浏览器交互测试，需要先 `make web-editor`，以及本机安装的 Chrome 或环境变量 `REDRAFT_CHROME` 指定的 Chromium |
+| `make test-library` | 在临时 SQLite 库中验证保存、关闭重开、删除和错误处理 |
+| `make snapshots` | 渲染真实原生视图，检查正文编辑器与系统材质并输出深浅色和窄窗截图到 `.build/ui-snapshots` |
 | `make lint` | 按随 Xcode 提供的 swift-format 默认规范检查全部 Swift 源码 |
 
 [产品规划](design.md) · [技术讨论](technical.md) · [架构视图](architecture.html) · [开发流程](devflow.md) · [开发日志](devlog/README.md)

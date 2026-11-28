@@ -1,9 +1,13 @@
 import Foundation
 
-public enum ChangeKind: String, Equatable, Sendable { case text, image, tableRow, tableColumn }
-public enum ReviewDecision: String, CaseIterable, Equatable, Sendable { case accept, keep, rewrite }
+public enum ChangeKind: String, Equatable, Codable, Sendable {
+  case text, image, tableRow, tableColumn
+}
+public enum ReviewDecision: String, CaseIterable, Equatable, Codable, Sendable {
+  case accept, keep, rewrite
+}
 
-public struct ReviewChange: Identifiable, Equatable, Sendable {
+public struct ReviewChange: Identifiable, Equatable, Codable, Sendable {
   public var id: UUID
   public var blockID: UUID
   public var kind: ChangeKind
@@ -45,7 +49,7 @@ public struct ReviewRequest: Identifiable, Equatable, Sendable {
   }
 }
 
-public struct ReviewBatch: Equatable, Sendable {
+public struct ReviewBatch: Equatable, Codable, Sendable {
   public let articleID: UUID
   public let baseRevisionID: UUID
   public var changes: [ReviewChange]
@@ -96,7 +100,7 @@ public struct ReviewBatch: Equatable, Sendable {
 }
 
 /// A completed reading pass. Source and result stay available even if the author edits again.
-public struct AnnotationRound: Identifiable, Equatable, Sendable {
+public struct AnnotationRound: Identifiable, Equatable, Codable, Sendable {
   public let id: UUID
   public let date: Date
   public let source: Article
@@ -123,7 +127,7 @@ public protocol ReviewProviding: Sendable {
   func changes(for request: ReviewRequest) async throws -> [ReviewChange]
 }
 
-public struct RewriteExample: Identifiable, Equatable, Sendable {
+public struct RewriteExample: Identifiable, Equatable, Codable, Sendable {
   public let id: UUID
   public let articleID: UUID
   public let blockID: UUID?

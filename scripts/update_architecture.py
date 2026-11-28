@@ -22,6 +22,11 @@ def review_files():
     paths = [ROOT / "project.yml", ROOT / "design.md", ROOT / "technical.md"]
     for directory in (ROOT / "App", ROOT / "Packages", ROOT / "Tests"):
         paths.extend(path for path in directory.rglob("*.swift") if ".build" not in path.parts)
+    editor = ROOT / "WebEditor"
+    paths.extend((editor / "src").glob("**/*"))
+    paths.extend((editor / "test").glob("**/*"))
+    paths.extend(editor.glob("*.mjs"))
+    paths.extend(editor / name for name in ("index.html", "package.json", "package-lock.json", "tsconfig.json"))
     return sorted(path for path in paths if path.is_file())
 
 
@@ -85,7 +90,7 @@ def build_data(manifest):
         "reviewStale": digest != manifest.pop("reviewedSourceHash"),
         "sourceHash": digest,
         "dirty": bool(
-            git_output("status", "--porcelain", "--", "App", "Packages", "Tests", "project.yml", "design.md", "technical.md")
+            git_output("status", "--porcelain", "--", "App", "Packages", "Tests", "WebEditor", "project.yml", "design.md", "technical.md")
         ),
     }
     manifest["sources"] = sources

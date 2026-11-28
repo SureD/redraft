@@ -1,7 +1,7 @@
 name: Redraft
 options:
   deploymentTarget:
-    macOS: "13.0"
+    macOS: "26.0"
 packages:
   RedraftCore:
     path: Packages/RedraftCore
@@ -11,6 +11,9 @@ targets:
     platform: macOS
     sources:
       - App
+      - path: WebEditor/dist
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: RedraftCore
     settings:

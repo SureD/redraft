@@ -18,10 +18,6 @@ struct WorkspaceView: View {
             windowToolbar
             Divider()
             if model.state.section == .articles && model.currentArticle != nil {
-              if model.state.formattingVisible && !model.isEditorLocked {
-                FormattingToolbar(model: model)
-                Divider()
-              }
               WritingView(model: model)
             } else if model.state.section == .examples {
               ExamplesView(model: model)
@@ -73,7 +69,7 @@ struct WorkspaceView: View {
           .accessibilityElement(children: .combine)
         }
       }
-      .onChange(of: inlineSidebar) { inline in
+      .onChange(of: inlineSidebar) { _, inline in
         if !inline { model.state.sidebarVisible = false }
       }
     }
@@ -99,22 +95,22 @@ struct WorkspaceView: View {
       ToolbarIcon(title: "新建文章 · ⌘N", symbol: "square.and.pencil", action: model.newArticle)
       Spacer(minLength: 0)
       if model.currentArticle != nil && model.state.section == .articles {
-        if !model.isEditorLocked {
-          ToolbarIcon(
-            title: "排版", symbol: "textformat", selected: model.state.formattingVisible
-          ) {
-            model.state.formattingVisible.toggle()
-          }
-        }
         annotationAction
       }
       Menu {
         if model.currentArticle != nil && model.state.section == .articles {
+          if !model.isEditorLocked {
+            Button("批注这段…") { model.showSheet(.customMark) }.disabled(model.selectedBlock == nil)
+          }
+          Button("复制摘录给 Agent", action: model.copyExcerptForAgent).disabled(
+            model.agentExcerpt == nil)
           Button("批注范围") {
             model.state.inspectorTab = .marks
             model.state.inspectorVisible = true
           }
           Button("段落轨迹", action: model.showProvenance).disabled(model.selectedBlock == nil)
+          Divider()
+          Button("导出 Markdown 和附件…") { model.exportMarkdown.send() }
           Divider()
         }
         Button("字数统计") { model.showSheet(.statistics) }.disabled(model.currentArticle == nil)
@@ -153,7 +149,7 @@ struct WorkspaceView: View {
       case .idle:
         if model.canRequestAnnotations {
           Button(action: model.beginReview) {
-            Label("请 AI 批注", systemImage: "text.bubble")
+            Label("试读示例批注", systemImage: "text.bubble")
           }
           .buttonStyle(.borderless)
           .help(model.markedCount == 0 ? "为全文生成示例批注 · ⌘↩" : "为标记的内容生成示例批注 · ⌘↩")

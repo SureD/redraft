@@ -1,632 +1,177 @@
 import AppKit
 import RedraftCore
 import SwiftUI
-import UniformTypeIdentifiers
+import WebKit
 
 @main
 struct EditorInteractionTests {
-  @MainActor
-  static func main() throws {
+  @MainActor static func main() throws {
     NSApplication.shared.setActivationPolicy(.prohibited)
-    try writeThroughNativePanel()
-    try semanticBridgePreservesParagraphRoles()
-    try editorSessionsStayIndependent()
-    try nativeCommitRejectsStaleComposition()
-    try mixedFormattingPreservesRuns()
-    try paragraphFormattingPreservesIndependentStyles()
-    try clearingAtCaretDoesNotEraseDocumentFormatting()
-    try tableBoundariesRejectStaleCallbacks()
-    try nativeFormattingUndoAndComposition()
-    try tableKeyboardNavigationRespectsTextBoundaries()
-    try selectedBlockShortcutsRespectTextFocus()
-    try imagePastePreservesRichText()
-    try imageImportsKeepTheirOriginalTarget()
-    print("Editor interactions: 13 scenarios passed")
-  }
-
-  @MainActor
-  private static func writeThroughNativePanel() throws {
-    let model = try TestSupport.model(articles: [])
-    let host = NSHostingView(rootView: WritingView(model: model))
+    let model = try TestSupport.demoModel()
+    let balcony = model.articles.first { $0.title == "阳台的一年" }!
+    model.newArticle()
+    let draft = model.currentArticle!.id
+    let first = model.currentArticle!.blocks[0].id
+    let host = NSHostingView(
+      rootView: WorkspaceView(model: model).environment(
+        \.documentImageResolver, DemoImageResolver()))
     host.sizingOptions = []
     let window = OffscreenTestWindow(
-      contentRect: NSRect(x: -8000, y: -8000, width: 720, height: 600), styleMask: [.titled],
+      contentRect: NSRect(x: -8000, y: -8000, width: 1080, height: 700), styleMask: [.titled],
       backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.contentView = host
     window.makeKeyAndOrderFront(nil)
     defer { window.close() }
-
-    func waitFor(_ message: @autoclosure () -> String, until ready: () -> Bool) throws {
-      for _ in 0..<100 {
-        host.layoutSubtreeIfNeeded()
-        while let event = NSApp.nextEvent(
-          matching: [.leftMouseDown, .leftMouseUp], until: .distantPast, inMode: .default,
-          dequeue: true)
-        {
-          window.sendEvent(event)
-        }
-        if ready() { return }
-        RunLoop.current.run(until: Date().addingTimeInterval(0.02))
-      }
-      throw Failure(message: message())
+    try window.waitForEditor(editable: true)
+    try window.waitFor("First input must go to the body, not the optional title") {
+      try window.js("document.activeElement?.classList.contains('ProseMirror')") as? Bool == true
     }
-
-    func click(at location: NSPoint) {
-      // Queue mouse-up as well so controls using AppKit's tracking loop receive a complete click.
-      for (type, number) in [(NSEvent.EventType.leftMouseUp, 2), (.leftMouseDown, 1)] {
-        let event = NSEvent.mouseEvent(
-          with: type, location: location, modifierFlags: [],
-          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-          context: nil, eventNumber: number, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0
-        )!
-        NSApp.postEvent(event, atStart: true)
-      }
+    try expect(window.web?.url?.isFileURL == true, "Writing must not require a server")
+    let original = "院子里的薄荷长得非常非常慢。"
+    _ = try window.js("document.execCommand('insertText',false,'\(original)')")
+    try window.waitFor("Typed text did not reach the native session") {
+      model.currentArticle?.blocks.first?.plainText == original
     }
-
-    model.newArticle()
-    try waitFor("A new sheet must be ready to type into the body") {
-      window.firstResponder is BlockTextView
-    }
-    let firstParagraph = window.firstResponder as! BlockTextView
+    let revision = model.currentArticle!.document.revisionID
+    model.renameArticle("薄荷手记")
+    model.markBlock(first, instruction: "更简洁")
     try expect(
-      firstParagraph.string.isEmpty && model.currentArticle?.title == ""
-        && firstParagraph.blockID == model.currentArticle?.blocks.first?.id,
-      "The title and first paragraph both start empty")
-    firstParagraph.insertText("起笔", replacementRange: firstParagraph.selectedRange())
-    try expect(
-      model.selectedBlock?.plainText == "起笔", "Typing immediately edits the first paragraph")
-    firstParagraph.selectAll(nil)
-    firstParagraph.deleteBackward(nil)
-    func firstField(in view: NSView) -> NSTextField? {
-      if let field = view as? NSTextField, field.isEditable { return field }
-      return view.subviews.lazy.compactMap { firstField(in: $0) }.first
-    }
-    guard let titleField = firstField(in: host), window.makeFirstResponder(titleField) else {
-      throw Failure(message: "The open paper must contain an editable title")
-    }
-    try waitFor("The title must accept keyboard focus") {
-      (window.firstResponder as? NSTextView)?.isFieldEditor == true
-    }
-    let title = window.firstResponder as! NSTextView
-    try expect(title.string.isEmpty, "Start with a genuinely empty title")
-    try expectCaret(in: title, fontSize: 32)
-    title.insertText("原生写作", replacementRange: title.selectedRange())
-    try expectCaret(in: title, fontSize: 32)
-    title.doCommand(by: #selector(NSResponder.insertNewline(_:)))
-    try waitFor("Return from the title must focus the first body paragraph") {
-      window.firstResponder is BlockTextView
-    }
-    let body = window.firstResponder as! BlockTextView
-    try expect(
-      model.currentArticle?.title == "原生写作" && body.string.isEmpty
-        && body.blockID == model.currentArticle?.blocks.first?.id,
-      "Return commits the title and leaves an empty body ready to type")
-
-    try expectCaret(in: body, fontSize: 17)
-    model.formatSelection(.size(32))
-    try expectCaret(in: body, fontSize: 32)
-    body.insertText("A", replacementRange: body.selectedRange())
-    body.insertNewline(nil)
-    try expectCaret(in: body, fontSize: 32)
-    body.setMarkedText(
-      "pin", selectedRange: NSRange(location: 3, length: 0), replacementRange: body.selectedRange())
-    try expect(
-      body.hasMarkedText() && model.selectedBlock?.plainText == "A\n",
-      "A composed syllable remains in the native buffer while the document contains only committed text"
+      model.currentArticle!.document.revisionID != revision, "Native metadata is versioned")
+    // Native title/mark updates must not remount the DOM or discard the page's undo stack.
+    _ = try window.js(
+      "document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true,cancelable:true}))"
     )
+    _ = try window.js("document.execCommand('insertText',false,'第二段🪴')")
+    try window.waitFor("Return did not create a second identifiable block") {
+      model.currentArticle?.blocks.last?.plainText == "第二段🪴"
+        && model.currentArticle?.blocks.count == 2
+    }
+    _ = try window.js(
+      "document.querySelector('.ProseMirror').dispatchEvent(new KeyboardEvent('keydown',{key:'z',code:'KeyZ',keyCode:90,metaKey:true,bubbles:true,cancelable:true}))"
+    )
+    try window.waitFor("BlockNote undo did not reach the article") {
+      model.currentArticle?.blocks.last?.plainText != "第二段🪴"
+    }
+    _ = try window.js(
+      "document.querySelector('.ProseMirror').dispatchEvent(new KeyboardEvent('keydown',{key:'z',code:'KeyZ',keyCode:90,metaKey:true,shiftKey:true,bubbles:true,cancelable:true}))"
+    )
+    try window.waitFor("Redo must restore both the original paragraph and new text before review") {
+      model.currentArticle?.blocks.first?.plainText == original
+        && model.currentArticle?.blocks.last?.plainText == "第二段🪴"
+    }
+    _ = try window.js(
+      "document.querySelector('.ProseMirror').dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}))"
+    )
+    try window.waitFor("WebKit composition signal missing") { model.composingInEditor }
     model.beginReview()
+    try expect(!model.isEditorLocked, "A pending candidate must not be reviewed")
+    _ = try window.js(
+      "document.querySelector('.ProseMirror').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}))"
+    )
+    try window.waitFor("Composition never released the document") { !model.composingInEditor }
+    model.beginReview()
+    try window.waitFor("Demo annotation did not target the saved paragraph") {
+      model.currentArticle?.phase == .ready
+    }
+    try window.waitForEditor(editable: false)
+    model.enterReview()
     try expect(
-      body.hasMarkedText() && model.currentArticle?.phase == .idle && !model.isEditorLocked,
-      "Requesting annotations while composing must leave the buffer and the draft editable")
-    model.dismissNotice()
-    body.insertText("拼", replacementRange: body.markedRange())
+      model.currentChange?.blockID == first, "Review must retain the BlockNote paragraph UUID")
+    model.completeReview(acceptRemaining: true)
+    try window.waitForEditor(editable: true)
+    try window.waitFor("Accepted revision did not render back in BlockNote") {
+      try (window.js("document.querySelector('.ProseMirror')?.textContent") as? String)?.contains(
+        "薄荷长得非常慢") == true
+    }
+    model.selectArticle(balcony.id)
+    try window.waitFor("Mixed article must render the actual embedded table and local image") {
+      try window.js(
+        "!!document.querySelector('.ProseMirror table') && [...document.querySelectorAll('.ProseMirror img')].some(i=>i.complete && i.naturalWidth>0 && i.src.startsWith('redraft-image:'))"
+      ) as? Bool == true
+    }
+    let images = EditorImages(resolver: DemoImageResolver())
+    images.reset(to: balcony.blocks)
+    let export = try MarkdownExport(article: balcony.document, images: images)
+    let paths = String(decoding: try JSONEncoder().encode(export.paths), as: UTF8.self)
+    guard let markdown = try window.js("window.redraft.markdown(\(paths))") as? String else {
+      throw PaperTestFailure(message: "Missing Markdown export")
+    }
+    let parent = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: parent) }
+    let exported = try export.write(markdown, in: parent)
+    let copy = try export.write(markdown, in: parent)
+    let text = try String(contentsOf: exported.appendingPathComponent("稿件.md"), encoding: .utf8)
     try expect(
-      model.selectedBlock?.plainText == "A\n拼", "Composition commits at the insertion point")
-    body.selectAll(nil)
-    body.deleteBackward(nil)
+      exported != copy && !text.contains("redraft-image:") && !export.paths.isEmpty
+        && export.paths.values.allSatisfy {
+          text.contains($0)
+            && FileManager.default.fileExists(atPath: exported.appendingPathComponent($0).path)
+        },
+      "Portable Markdown must reference the exported images without overwriting a previous export")
+    // A replaced image can have a live undo handle that still identifies the old bitmap.
+    var revised = balcony.document
+    let pixel = Data(
+      base64Encoded:
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j4XoAAAAASUVORK5CYII="
+    )!
+    let index = revised.blocks.firstIndex { $0.image != nil }!
+    let imageID = revised.blocks[index].id.uuidString.lowercased()
+    revised.blocks[index].image = ImageContent(data: pixel)
+    images.remember(revised.blocks)
+    let replacement = try MarkdownExport(article: revised, images: images)
+    let updatedFolder = try replacement.write(markdown, in: parent)
+    let updatedFile = updatedFolder.appendingPathComponent(replacement.paths[imageID]!)
+    let undoURL = URL(string: "redraft-image://asset/" + imageID)!
     try expect(
-      body.string.isEmpty && model.selectedBlock?.plainText == "",
-      "Deleting all text must leave the same paragraph empty")
-    body.insertText("继续", replacementRange: body.selectedRange())
+      images.data(for: undoURL) != pixel && (try Data(contentsOf: updatedFile)) == pixel,
+      "Undo must keep the old image while export uses the replacement")
+    let page = window.web
+    model.selectArticle(draft)
+    try window.waitFor("Returning to an article must restore its adopted revision") {
+      try (window.js("document.querySelector('.ProseMirror')?.textContent") as? String)?.contains(
+        "薄荷长得非常慢") == true
+    }
+    try expect(window.web === page, "One writing surface supports the complete document")
+    // A second writer can publish while this page is showing an unconfirmed candidate.
+    _ = try window.js(
+      """
+      window.beforeComposition = document.querySelector('.ProseMirror');
+      window.beforeComposition.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+      document.execCommand('insertText',false,'候选文字');
+      """)
+    try window.waitFor("Missing composition before external edit") { model.composingInEditor }
+    let externalText = "另一窗口已经保存的正文。"
+    TestSupport.replaceText(model, first, externalText)
+    try window.waitFor("The authoritative session did not accept the other writer") {
+      model.currentArticle?.blocks.first?.plainText == externalText
+    }
     try expect(
-      model.selectedBlock?.plainText == "继续", "An empty paragraph accepts immediate typing")
-
-    let table = DocumentBlock(table: TableContent(rows: [["保留表格"]]))
-    model.insertBlock(table)
-    model.selectBlock(body.blockID)
-    click(at: NSPoint(x: host.bounds.midX, y: 35))
-    try waitFor("Continuing after a table must focus a new trailing paragraph") {
-      guard let editor = window.firstResponder as? BlockTextView,
-        let last = model.currentArticle?.blocks.last
+      try window.js("window.beforeComposition === document.querySelector('.ProseMirror')") as? Bool
+        == true,
+      "A concurrent edit must wait for the IME to finish before replacing the writing surface")
+    _ = try window.js(
+      "window.beforeComposition.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}))"
+    )
+    try window.waitFor("A stale IME commit must restore the current article in the editor") {
+      guard !model.composingInEditor, model.currentArticle?.blocks.first?.plainText == externalText
       else { return false }
-      return editor.blockID == last.id && last.kind == .text && editor !== body
+      return try window.js(
+        "document.querySelector('.ProseMirror').textContent.includes('\(externalText)')") as? Bool
+        == true
     }
-    let trailing = window.firstResponder as! BlockTextView
-    trailing.insertText("表后", replacementRange: trailing.selectedRange())
+    let assets = EditorImages(resolver: BundleImageResolver())
     try expect(
-      model.currentArticle?.blocks.map(\.id) == [body.blockID!, table.id, trailing.blockID!]
-        && model.selectedBlock?.plainText == "表后",
-      "Continuing from an earlier selection appends after the last attachment")
-    trailing.setSelectedRange(NSRange(location: 0, length: 0))
-    click(at: NSPoint(x: host.bounds.midX, y: 35))
-    try waitFor("A second continuation must reuse the final paragraph at its end") {
-      trailing.selectedRange() == NSRange(location: 2, length: 0)
-        && window.firstResponder === trailing && model.currentArticle?.blocks.count == 3
-    }
-    trailing.insertNewline(nil)
-    model.formatSelection(.size(32))
-    trailing.insertText("A", replacementRange: trailing.selectedRange())
-    model.formatSelection(.size(17))
-    trailing.insertText("bb", replacementRange: trailing.selectedRange())
-    trailing.moveLeft(nil)
-    try expectCaret(in: trailing, fontSize: 17)
-    trailing.moveToEndOfDocument(nil)
-    let longPassage = String(repeating: "输入一行正文\n", count: 40)
-    trailing.insertText(longPassage, replacementRange: trailing.selectedRange())
-    trailing.insertNewline(nil)
-    var geometry = ""
-    try waitFor("The empty final line of a long paragraph must be fully visible: \(geometry)") {
-      let caret = trailing.firstRect(forCharacterRange: trailing.selectedRange(), actualRange: nil)
-      let editor = window.convertToScreen(trailing.convert(trailing.bounds, to: nil))
-      let viewport = window.convertToScreen(host.convert(host.bounds, to: nil))
-      let visible = viewport.intersection(editor).insetBy(dx: -1, dy: -1)
-      geometry = "caret \(caret), viewport \(viewport), editor \(editor)"
-      return editor.height > viewport.height && caret.height > 0 && visible.contains(caret)
-        && trailing.selectedRange() == NSRange(location: trailing.string.utf16.count, length: 0)
-    }
-
-    // Click beside a real read-only paragraph. The margin must stay outside the text view's hit area.
-    let annotated = try TestSupport.demoModel()
-    let pending = annotated.articles.first { $0.phase == .ready }!
-    let original = pending.blocks
-    annotated.selectArticle(pending.id)
-    let paper = NSHostingView(rootView: WritingView(model: annotated))
-    window.contentView = paper
-    let firstID = pending.changes[0].blockID
-    func firstTextBlock(in view: NSView) -> BlockTextView? {
-      if let editor = view as? BlockTextView, editor.blockID == firstID { return editor }
-      return view.subviews.lazy.compactMap { firstTextBlock(in: $0) }.first
-    }
-    try waitFor("The source paragraph must mount beside its annotation button") {
-      paper.layoutSubtreeIfNeeded()
-      return firstTextBlock(in: paper)?.bounds.width ?? 0 > 100
-    }
-    let source = firstTextBlock(in: paper)!
-    let sourceFrame = source.convert(source.bounds, to: nil)
-    click(at: NSPoint(x: sourceFrame.maxX + 25, y: sourceFrame.maxY - 12))
-    try waitFor("The paper margin should open the comments for its paragraph") {
-      annotated.state.inspectorVisible && annotated.currentChange?.blockID == firstID
-    }
-    try expect(
-      annotated.state.inspectorTab == .annotations && annotated.currentArticle?.blocks == original,
-      "Reading an annotation on the page preserves the source")
-
-  }
-
-  @MainActor
-  private static func expectCaret(in editor: NSTextView, fontSize: CGFloat) throws {
-    let rect = editor.firstRect(forCharacterRange: editor.selectedRange(), actualRange: nil)
-    let nativeHeight = NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: fontSize))
-    try expect(
-      abs(rect.height - nativeHeight) <= 2,
-      "Insertion point at \(fontSize) pt should match native height \(nativeHeight), got \(rect.height)"
+      assets.stage("data:image/png;base64,Zm9v") == nil
+        && assets.data(for: URL(fileURLWithPath: "/tmp/example.png")) == nil,
+      "An image handle cannot introduce arbitrary files or non-image bytes")
+    print(
+      "Real BlockNote window: focus, Chinese/emoji, split, undo, IME guard, review, local image/table and article switching passed"
     )
   }
 
-  @MainActor
-  private static func model(text: NSAttributedString) throws -> WorkspaceViewModel {
-    let block = DocumentBlock(text: RichTextBridge.content(from: text))
-    let article = Article(title: "编辑器测试", blocks: [block])
-    let model = try TestSupport.model(articles: [article])
-    model.selectArticle(article.id)
-    model.selectBlock(block.id)
-    model.state.selectedRange = NSRange(location: 0, length: text.length)
-    return model
+  private static func expect(_ test: Bool, _ message: String) throws {
+    if !test { throw PaperTestFailure(message: message) }
   }
-
-  @MainActor
-  private static func semanticBridgePreservesParagraphRoles() throws {
-    let largeBody = NSAttributedString(
-      string: "这是大号正文", attributes: [.font: NSFont.systemFont(ofSize: 28)])
-    let model = try model(text: largeBody)
-    try expect(
-      model.editorSelectionStyle.paragraphTitle == "正文",
-      "Large body text must not be inferred to be a heading")
-    model.formatSelection(.heading(2))
-    try expect(
-      model.selectedBlock?.text.paragraphStyle.kind == .heading(level: 2),
-      "Heading must be explicit document semantics")
-    model.formatSelection(.size(12))
-    try expect(
-      model.editorSelectionStyle.paragraphTitle == "标题 2",
-      "Changing heading size must preserve its semantic role")
-    let native = RichTextBridge.attributedString(from: model.selectedBlock!.text)
-    let restored = RichTextBridge.content(from: native)
-    try expect(
-      restored.paragraphStyle.kind == .heading(level: 2),
-      "Native bridge must preserve semantic heading on round trip")
-    let paragraph = ParagraphStyle(
-      kind: .heading(level: 1), alignment: .right, headIndent: 24, firstLineHeadIndent: 12,
-      tailIndent: -8, lineSpacing: 3, paragraphSpacing: 11,
-      paragraphSpacingBefore: 4, lineHeightMultiple: 1.6,
-      list: ListStyle(marker: .decimal, startingItemNumber: 3))
-    let rich = RichTextContent(
-      string: "标题",
-      defaultStyle: TextStyle(
-        bold: true, italic: true, underline: true, strikethrough: true, foreground: .secondary,
-        background: .rgba(0.4, 0.3, 0.2, 0.25)), paragraphStyle: paragraph)
-    let roundTrip = RichTextBridge.content(from: RichTextBridge.attributedString(from: rich))
-    try expect(
-      roundTrip.paragraphStyle == paragraph,
-      "Paragraph layout and list start must survive bridge conversion")
-    try expect(
-      roundTrip.defaultStyle.bold && roundTrip.defaultStyle.italic
-        && roundTrip.defaultStyle.underline && roundTrip.defaultStyle.strikethrough
-        && roundTrip.defaultStyle.foreground == .secondary,
-      "Character styles and semantic colors must survive bridge conversion")
-  }
-
-  @MainActor
-  private static func editorSessionsStayIndependent() throws {
-    let first = EditorSession()
-    let second = EditorSession()
-    let firstEditor = BlockTextView(usingTextLayoutManager: true)
-    let secondEditor = BlockTextView(usingTextLayoutManager: true)
-    let firstID = UUID()
-    let secondID = UUID()
-    firstEditor.blockID = firstID
-    secondEditor.blockID = secondID
-    firstEditor.typingAttributes = [.font: NSFont.boldSystemFont(ofSize: 17)]
-    secondEditor.typingAttributes = [.font: NSFont.systemFont(ofSize: 17)]
-    first.activate(firstEditor)
-    second.activate(secondEditor)
-    let caret = NSRange(location: 0, length: 0)
-    try expect(
-      first.selectionStyle(blockID: firstID, range: caret)?.state(for: .bold) == .on,
-      "First window owns its insertion style")
-    try expect(
-      second.selectionStyle(blockID: secondID, range: caret)?.state(for: .bold) == .off,
-      "A second window cannot inherit the first editor's style")
-    second.clear()
-    try expect(
-      first.selectionStyle(blockID: firstID, range: caret) != nil
-        && second.selectionStyle(blockID: secondID, range: caret) == nil,
-      "Clearing one editor session must leave another intact")
-  }
-
-  @MainActor
-  private static func nativeCommitRejectsStaleComposition() throws {
-    let model = try model(text: NSAttributedString(string: "旧稿"))
-    let blockID = model.selectedBlock!.id
-    let articleID = model.currentArticle!.id
-    let parent = NativeRichText(
-      content: { model.selectedBlock!.text },
-      onCommit: { text, expected in
-        model.updateBlockText(blockID, text: text, expectedContent: expected, articleID: articleID)
-      }, measuredHeight: .constant(40), blockID: blockID, session: model.editorSession,
-      editable: true, onSelection: { model.updateSelection(blockID: blockID, range: $0) })
-    let coordinator = NativeRichText.Coordinator(parent)
-    let native = BlockTextView(usingTextLayoutManager: true)
-    native.isEditable = true
-    native.textStorage?.setAttributedString(
-      RichTextBridge.attributedString(from: model.selectedBlock!.text))
-    native.setMarkedText(
-      "pin", selectedRange: NSRange(location: 3, length: 0),
-      replacementRange: NSRange(location: 0, length: 2))
-    coordinator.commit(native)
-    try expect(
-      model.selectedBlock?.plainText == "旧稿", "Input method composition stays in the native buffer")
-    model.updateBlockText(blockID, text: NSAttributedString(string: "外部更新"))
-    native.unmarkText()
-    coordinator.commit(native)
-    try expect(
-      model.selectedBlock?.plainText == "外部更新" && native.string == "外部更新",
-      "A stale composition cannot overwrite a newer document and must restore the authoritative content"
-    )
-    native.textStorage?.append(NSAttributedString(string: "一"))
-    coordinator.commit(native)
-    native.textStorage?.append(NSAttributedString(string: "二"))
-    coordinator.commit(native)
-    try expect(
-      model.selectedBlock?.plainText == "外部更新一二",
-      "Rapid commits advance their base before the next UI render")
-  }
-
-  @MainActor
-  private static func mixedFormattingPreservesRuns() throws {
-    let source = NSMutableAttributedString(
-      string: "甲乙丙丁", attributes: [.font: NSFont.systemFont(ofSize: 17)])
-    source.addAttribute(
-      .font, value: NSFont.boldSystemFont(ofSize: 21), range: NSRange(location: 0, length: 2))
-    let model = try model(text: source)
-    let selection = EditorSelectionStyle(text: source, range: model.state.selectedRange)
-    try expect(
-      selection.state(for: .bold) == .mixed && selection.commonSize == nil,
-      "Mixed selections must report mixed styles")
-    model.formatSelection(.size(24))
-    let resized = RichTextBridge.attributedString(from: model.selectedBlock!.text)
-    let first = resized.attribute(.font, at: 0, effectiveRange: nil) as! NSFont
-    let last = resized.attribute(.font, at: 3, effectiveRange: nil) as! NSFont
-    try expect(first.pointSize == 24 && last.pointSize == 24, "Size applies to every selected run")
-    try expect(
-      NSFontManager.shared.traits(of: first).contains(.boldFontMask)
-        && !NSFontManager.shared.traits(of: last).contains(.boldFontMask),
-      "Changing size must preserve each run's emphasis")
-    model.formatSelection(.font("Menlo"))
-    let mono = RichTextBridge.attributedString(from: model.selectedBlock!.text)
-    try expect(
-      NSFontManager.shared.traits(of: mono.attribute(.font, at: 0, effectiveRange: nil) as! NSFont)
-        .contains(.boldFontMask), "Changing family must preserve bold emphasis")
-    model.formatSelection(.bold)
-    try expect(
-      EditorSelectionStyle(
-        text: RichTextBridge.attributedString(from: model.selectedBlock!.text),
-        range: model.state.selectedRange
-      ).state(
-        for: .bold) == .on, "Toggling a mixed selection should enable the style everywhere")
-    model.formatSelection(.bold)
-    try expect(
-      EditorSelectionStyle(
-        text: RichTextBridge.attributedString(from: model.selectedBlock!.text),
-        range: model.state.selectedRange
-      ).state(
-        for: .bold) == .off, "Toggling a uniform selection should remove the style")
-  }
-
-  @MainActor
-  private static func paragraphFormattingPreservesIndependentStyles() throws {
-    let source = NSMutableAttributedString(
-      string: "One\nTwo", attributes: [.font: NSFont.systemFont(ofSize: 17)])
-    let first = NSMutableParagraphStyle()
-    first.paragraphSpacing = 8
-    let second = NSMutableParagraphStyle()
-    second.paragraphSpacing = 22
-    source.addAttribute(.paragraphStyle, value: first, range: NSRange(location: 0, length: 4))
-    source.addAttribute(.paragraphStyle, value: second, range: NSRange(location: 4, length: 3))
-    let model = try model(text: source)
-    model.formatSelection(.alignment(.center))
-    let text = RichTextBridge.attributedString(from: model.selectedBlock!.text)
-    let a = text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as! NSParagraphStyle
-    let b = text.attribute(.paragraphStyle, at: 4, effectiveRange: nil) as! NSParagraphStyle
-    try expect(
-      a.alignment == .center && b.alignment == .center && a.paragraphSpacing == 8
-        && b.paragraphSpacing == 22, "Alignment must not overwrite unrelated paragraph styles")
-    model.formatSelection(.list(false))
-    model.formatSelection(.list(true))
-    try expect(
-      EditorSelectionStyle(
-        text: RichTextBridge.attributedString(from: model.selectedBlock!.text),
-        range: model.state.selectedRange
-      ).state(
-        for: .list(true)) == .on, "Numbered list switches from bullets without clearing the list")
-  }
-
-  @MainActor
-  private static func clearingAtCaretDoesNotEraseDocumentFormatting() throws {
-    let source = NSAttributedString(
-      string: "保留加粗", attributes: [.font: NSFont.boldSystemFont(ofSize: 20)])
-    let model = try model(text: source)
-    model.state.selectedRange = NSRange(location: 1, length: 0)
-    model.formatSelection(.clear)
-    let first =
-      RichTextBridge.attributedString(from: model.selectedBlock!.text).attribute(
-        .font, at: 0, effectiveRange: nil) as! NSFont
-    try expect(
-      NSFontManager.shared.traits(of: first).contains(.boldFontMask),
-      "Clear formatting at an insertion point must not erase the whole paragraph")
-  }
-
-  @MainActor
-  private static func tableBoundariesRejectStaleCallbacks() throws {
-    let model = try model(text: NSAttributedString(string: ""))
-    let table = DocumentBlock(table: TableContent(rows: [["a", "b"], ["c", "d"]]))
-    model.insertBlock(table)
-    let deletedRow = TableCell(rowID: table.table!.rowIDs[0], columnID: table.table!.columnIDs[1])
-    let deletedColumn = TableCell(
-      rowID: table.table!.rowIDs[1], columnID: table.table!.columnIDs[0])
-    let retained = TableCell(rowID: table.table!.rowIDs[1], columnID: table.table!.columnIDs[1])
-    model.deleteTableRow(table.id, at: 0)
-    model.updateTableCell(table.id, cell: deletedRow, text: "stale")
-    model.deleteTableColumn(table.id, at: 0)
-    model.updateTableCell(table.id, cell: deletedColumn, text: "stale")
-    try expect(
-      model.selectedBlock?.table?.rows == [["d"]],
-      "Stale text callbacks cannot access removed cells")
-    model.insertTableRow(table.id, at: 0)
-    model.insertTableColumn(table.id, at: 0)
-    model.updateTableCell(table.id, cell: retained, text: "live")
-    try expect(
-      model.selectedBlock?.table?.rows[1][1] == "live",
-      "Cell edits retain their identity when rows and columns move")
-    for _ in 0..<45 { model.insertTableRow(table.id, at: 99) }
-    for _ in 0..<12 { model.insertTableColumn(table.id, at: 99) }
-    try expect(
-      model.selectedBlock?.table?.rows.count == 40 && model.selectedBlock?.table?.columnCount == 8,
-      "Table insertion honors the UI's row and column limits")
-  }
-
-  @MainActor
-  private static func nativeFormattingUndoAndComposition() throws {
-    let source = NSAttributedString(
-      string: "输入法和撤销", attributes: [.font: NSFont.systemFont(ofSize: 17)])
-    let native = BlockTextView(usingTextLayoutManager: true)
-    native.isEditable = true
-    native.allowsUndo = true
-    native.textStorage?.setAttributedString(source)
-    let selected = NSRange(location: 0, length: source.length)
-    native.setSelectedRange(selected)
-    let changed = NSMutableAttributedString(attributedString: source)
-    changed.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: selected)
-    let undo = native.undoManager!
-    undo.groupsByEvent = false
-    undo.beginUndoGrouping()
-    native.applyFormatting(changed, selection: selected, typing: EditorTypography.bodyAttributes)
-    undo.endUndoGrouping()
-    try expect(
-      undo.canUndo && native.attributedString().isEqual(to: changed),
-      "Native formatting must register an undoable edit")
-    undo.undo()
-    try expect(
-      native.attributedString().isEqual(to: source),
-      "Undo restores the exact original attributed content")
-    undo.redo()
-    try expect(native.attributedString().isEqual(to: changed), "Redo restores formatting")
-    undo.beginUndoGrouping()
-    native.setMarkedText(
-      "pin", selectedRange: NSRange(location: 3, length: 0), replacementRange: selected)
-    let composition = NSAttributedString(attributedString: native.attributedString())
-    native.applyFormatting(source, selection: selected, typing: EditorTypography.bodyAttributes)
-    try expect(
-      native.hasMarkedText() && native.attributedString().isEqual(to: composition),
-      "Formatting must not replace an in-progress input method composition")
-    native.unmarkText()
-    undo.endUndoGrouping()
-  }
-
-  @MainActor
-  private static func tableKeyboardNavigationRespectsTextBoundaries() throws {
-    let cell = TableCell(rowID: UUID(), columnID: UUID())
-    var focus = TableFocus()
-    var navigation: (Int, Bool)?
-    let parent = TableCellField(
-      text: .constant("abc"), cell: cell,
-      focus: Binding(get: { focus }, set: { focus = $0 }),
-      isHeader: false, editable: true, columnCount: 3,
-      onNavigate: { direction, append in
-        navigation = (direction, append)
-        return true
-      })
-    let coordinator = TableCellField.Coordinator(parent)
-    let field = NSTextField()
-    let text = NSTextView(usingTextLayoutManager: true)
-    text.string = "abc"
-    text.setSelectedRange(NSRange(location: 1, length: 0))
-    try expect(
-      !coordinator.control(field, textView: text, doCommandBy: #selector(NSResponder.moveUp(_:)))
-        && navigation == nil, "Arrow keys inside text must remain native cursor movement")
-    text.setSelectedRange(NSRange(location: 0, length: 0))
-    try expect(
-      coordinator.control(field, textView: text, doCommandBy: #selector(NSResponder.moveUp(_:)))
-        && navigation?.0 == -3 && navigation?.1 == false,
-      "Up at the start of a cell moves one row without adding rows")
-    text.setSelectedRange(NSRange(location: 3, length: 0))
-    try expect(
-      coordinator.control(field, textView: text, doCommandBy: #selector(NSResponder.moveDown(_:)))
-        && navigation?.0 == 3 && navigation?.1 == false, "Down at the end of a cell moves one row")
-    try expect(
-      coordinator.control(field, textView: text, doCommandBy: #selector(NSResponder.insertTab(_:)))
-        && navigation?.0 == 1 && navigation?.1 == true, "Only forward Tab can append a final row")
-    coordinator.controlTextDidBeginEditing(
-      Notification(name: NSControl.textDidBeginEditingNotification, object: field))
-    coordinator.controlTextDidEndEditing(
-      Notification(name: NSControl.textDidEndEditingNotification, object: field))
-    try expect(
-      focus.cell == cell && !focus.isEditing,
-      "Leaving a field preserves the selected cell for table menus")
-  }
-
-  @MainActor
-  private static func selectedBlockShortcutsRespectTextFocus() throws {
-    let model = try model(text: NSAttributedString(string: "正文"))
-    let table = DocumentBlock(table: TableContent(rows: [["保留输入"]]))
-    model.insertBlock(table)
-    try expect(
-      !model.handleSelectedBlockKey(51, textInputFocused: true)
-        && model.selectedBlock?.id == table.id, "Delete while typing must never delete a block")
-    try expect(
-      model.handleSelectedBlockKey(53, textInputFocused: false) && model.selectedBlock == nil,
-      "Escape clears whole-block selection")
-    model.selectBlock(table.id)
-    try expect(
-      model.handleSelectedBlockKey(36, textInputFocused: false)
-        && model.selectedBlock?.kind == .text && model.selectedBlock?.text.string.isEmpty == true,
-      "Enter after a selected block creates an editable paragraph")
-    model.selectBlock(table.id)
-    try expect(
-      model.handleSelectedBlockKey(117, textInputFocused: false)
-        && !model.currentArticle!.blocks.contains(where: { $0.id == table.id }),
-      "Forward Delete removes only the selected non-text block")
-  }
-
-  @MainActor
-  private static func imagePastePreservesRichText() throws {
-    let pasteboard = NSPasteboard(name: .init("redraft.image-tests.\(UUID())"))
-    defer { pasteboard.releaseGlobally() }
-    pasteboard.setData(try pngData(), forType: .png)
-    try expect(
-      ImageTransfer.imageOnlyPayload(from: pasteboard) != nil,
-      "An image-only clipboard exposes an image payload")
-    pasteboard.setString("ordinary text", forType: .string)
-    try expect(
-      ImageTransfer.imageOnlyPayload(from: pasteboard) == nil,
-      "Text mixed with an image must use native rich-text paste")
-    pasteboard.clearContents()
-    pasteboard.setData(try pngData(), forType: .png)
-    pasteboard.setData(Data("rtf".utf8), forType: .rtf)
-    try expect(
-      ImageTransfer.imageOnlyPayload(from: pasteboard) == nil,
-      "Formatted clipboard content must not be intercepted")
-  }
-
-  @MainActor
-  private static func imageImportsKeepTheirOriginalTarget() throws {
-    let data = try pngData()
-    let model = try model(text: NSAttributedString(string: "first"))
-    let originalArticleID = model.currentArticle!.id
-    let anchorID = model.selectedBlock!.id
-    let target = model.imageImportTarget(after: anchorID)!
-    let second = DocumentBlock(text: RichTextContent(string: "second"))
-    model.insertBlock(second)
-    model.importImageData(data, target: target)
-    try expect(
-      model.currentArticle!.blocks[1].kind == .image
-        && model.currentArticle!.blocks[2].id == second.id,
-      "Image completion uses the original anchor, even after selection changes")
-    let count = model.currentArticle!.blocks.count
-    model.importImageData(Data(repeating: 0, count: ImageTransfer.maximumBytes + 1), target: target)
-    try expect(
-      model.currentArticle!.blocks.count == count && model.state.notice == "图片不能超过 20 MB",
-      "All image entry points share the size limit")
-    model.importImageData(Data("not an image".utf8), target: target)
-    try expect(
-      model.currentArticle!.blocks.count == count && model.state.notice == "无法读取这张图片",
-      "Invalid image bytes do not enter the document")
-
-    let provider = NSItemProvider()
-    provider.registerDataRepresentation(for: .image, visibility: .all) { completion in
-      completion(data, nil)
-      return nil
-    }
-    try expect(
-      model.receiveImageDrop([provider], after: anchorID), "Image providers are accepted for drop")
-    model.newArticle()
-    model.importImageData(data, target: target)
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-    try expect(
-      model.currentArticle!.blocks.allSatisfy { $0.kind == .text }
-        && model.articles.first(where: { $0.id == originalArticleID })!.blocks.count == count,
-      "An asynchronous drop cannot cross an article switch")
-    model.selectArticle(originalArticleID)
-    model.deleteBlock(anchorID)
-    let remaining = model.currentArticle!.blocks.count
-    model.importImageData(data, target: target)
-    try expect(
-      model.currentArticle!.blocks.count == remaining,
-      "A deleted insertion anchor cancels a pending image import")
-  }
-
-  @MainActor
-  private static func pngData() throws -> Data {
-    let bitmap = NSBitmapImageRep(
-      bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2, bitsPerSample: 8, samplesPerPixel: 4,
-      hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-    return bitmap.representation(using: .png, properties: [:])!
-  }
-
-  private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
-    if !condition() { throw Failure(message: message) }
-  }
-
-  private struct Failure: Error { let message: String }
 }

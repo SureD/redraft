@@ -70,7 +70,7 @@ struct ArticleSidebar: View {
             maxWidth: .infinity, alignment: .leading)
         }.buttonStyle(.plain).font(.system(size: 13, weight: .medium))
           .help("新建文章 · ⌘N")
-        Text("仅保留至退出 · 本地示例批注")
+        Text("本地文章库 · 示例批注")
           .font(.system(size: 10)).foregroundStyle(.secondary)
       }.padding(.horizontal, 20).padding(.bottom, 18)
     }
@@ -129,7 +129,7 @@ struct ArticleSidebar: View {
     guard let window = NSApp.keyWindow else { return }
     let alert = NSAlert()
     alert.messageText = "删除“\(article.displayTitle)”？"
-    alert.informativeText = "这篇文章及本次运行中的修改会被移除。"
+    alert.informativeText = "这篇文章及其改稿历史会从本地文章库中删除。"
     alert.addButton(withTitle: "取消")
     alert.addButton(withTitle: "删除")
     alert.beginSheetModal(for: window) { response in

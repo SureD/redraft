@@ -63,8 +63,6 @@ struct WindowAppearance: NSViewRepresentable {
 }
 
 final class WindowAppearanceView: NSView {
-  override var acceptsFirstResponder: Bool { true }
-
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     guard let window else { return }
@@ -74,7 +72,6 @@ final class WindowAppearanceView: NSView {
     window.isOpaque = false
     window.isMovableByWindowBackground = false
     window.minSize = NSSize(width: 780, height: 560)
-    window.initialFirstResponder = self
   }
 }
 

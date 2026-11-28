@@ -31,8 +31,6 @@ struct WorkspaceSheetView: View {
     case .shortcuts: "快捷键"
     case .statistics: "字数统计"
     case .about: "关于 Redraft"
-    case .insertTable: "插入表格"
-    case .imageDescription: "图片替代文字"
     }
   }
 
@@ -64,52 +62,6 @@ struct WorkspaceSheetView: View {
       ) {
         model.submitRewrite()
       }
-    case .insertTable:
-      VStack(spacing: 5) {
-        ForEach(1...8, id: \.self) { row in
-          HStack(spacing: 5) {
-            ForEach(1...8, id: \.self) { column in
-              Button {
-                model.state.tableRows = row
-                model.state.tableColumns = column
-              } label: {
-                RoundedRectangle(cornerRadius: 3)
-                  .fill(
-                    row <= model.state.tableRows && column <= model.state.tableColumns
-                      ? PaperTheme.accent.opacity(0.2) : PaperTheme.fill
-                  )
-                  .overlay(RoundedRectangle(cornerRadius: 3).stroke(PaperTheme.separator))
-                  .frame(width: 28, height: 22)
-              }.buttonStyle(.plain).accessibilityLabel("\(row) 行 \(column) 列")
-            }
-          }
-        }
-      }.frame(maxWidth: .infinity)
-      HStack {
-        Stepper("\(model.state.tableRows) 行", value: $model.state.tableRows, in: 1...8)
-        Spacer(minLength: 28)
-        Stepper("\(model.state.tableColumns) 列", value: $model.state.tableColumns, in: 1...8)
-      }
-      Text("第一行作为标题行，可在表格菜单中调整。").font(.caption).foregroundStyle(.secondary)
-      actions("插入表格") {
-        let rows = Array(
-          repeating: Array(repeating: "", count: model.state.tableColumns),
-          count: model.state.tableRows)
-        model.insertBlock(
-          DocumentBlock(table: TableContent(rows: rows, hasHeader: rows.count > 1)))
-        model.dismissSheet()
-      }
-    case .imageDescription:
-      Text("简短描述图片内容，方便使用屏幕阅读器的人理解。").foregroundStyle(.secondary)
-      TextField("例如：阳台上并排摆着三个陶土花盆", text: $model.state.imageDescription, axis: .vertical)
-        .lineLimit(3...5).textFieldStyle(.roundedBorder)
-      actions("完成") {
-        if var block = model.selectedBlock {
-          block.image?.altText = model.state.imageDescription
-          model.updateBlock(block)
-        }
-        model.dismissSheet()
-      }
     case .statistics:
       if let article = model.currentArticle {
         Text(article.displayTitle).foregroundStyle(.secondary)
@@ -130,11 +82,11 @@ struct WorkspaceSheetView: View {
         VStack(alignment: .leading, spacing: 7) {
           Text("Redraft").font(.headline)
           Text("伴随式写作编辑器").foregroundStyle(.secondary)
-          Text("0.1 · 原生界面预览").font(.caption).foregroundStyle(.secondary)
+          Text("macOS · BlockNote").font(.caption).foregroundStyle(.secondary)
         }
       }
       Divider()
-      Text("批注来自本地演示。原稿、成稿和段落轨迹仅保留到退出应用。")
+      Text("文章保存在本机。批注来自本地演示，只有你确认的改动才会写入正文。")
         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       dismissButton
     case .shortcuts:
@@ -144,6 +96,7 @@ struct WorkspaceSheetView: View {
         shortcut("请求或阅读批注", "⌘ ↩")
         Divider()
         shortcut("粗体 / 斜体 / 下划线", "⌘ B / I / U")
+        shortcut("插入图片、表格等内容", "/")
         shortcut("撤销 / 重做（正文）", "⌘ Z / ⌘ ⇧ Z")
         shortcut("显示快捷键", "⌘ /")
       }

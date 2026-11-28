@@ -1,7 +1,7 @@
 import Foundation
 
 /// A value snapshot of one structured document. ArticleSession owns the writable current snapshot.
-public struct Article: Identifiable, Equatable, Sendable {
+public struct Article: Identifiable, Equatable, Codable, Sendable {
   public var id: UUID
   public var revisionID: UUID
   public var title: String
@@ -53,21 +53,24 @@ public struct Article: Identifiable, Equatable, Sendable {
     guard !blocks.isEmpty, ids.count == blocks.count,
       marks.keys.allSatisfy({ ids.contains($0) })
     else { throw EditingError.invalidDocument }
+    try BlockNoteDocument.validateHierarchy(blocks)
     for block in blocks { try block.validate() }
   }
 }
 
 public enum BlockKind: String, Equatable, Sendable { case text, image, table }
 
-public enum BlockContent: Equatable, Sendable {
+public enum BlockContent: Equatable, Codable, Sendable {
   case text(RichTextContent)
   case image(ImageContent)
   case table(TableContent)
 }
 
-public struct DocumentBlock: Identifiable, Equatable, Sendable {
+public struct DocumentBlock: Identifiable, Equatable, Codable, Sendable {
   public var id: UUID
   public var content: BlockContent
+  // Optional so older local snapshots need no migration. Native review/search use `content`.
+  var blockNote: BlockNoteMetadata?
 
   public init(id: UUID = UUID(), content: BlockContent = .text(RichTextContent())) {
     self.id = id
@@ -84,6 +87,18 @@ public struct DocumentBlock: Identifiable, Equatable, Sendable {
     case .image: .image
     case .table: .table
     }
+  }
+
+  public static func == (lhs: Self, rhs: Self) -> Bool {
+    guard lhs.id == rhs.id, lhs.content == rhs.content, lhs.blockNote == rhs.blockNote else {
+      return false
+    }
+    // Swift String equality accepts canonically equivalent spellings. WebKit selections and
+    // rich-text ranges, however, refer to the exact UTF-16 of this revision.
+    if case .text(let a) = lhs.content, case .text(let b) = rhs.content {
+      return a.string.utf8.elementsEqual(b.string.utf8)
+    }
+    return true
   }
 
   /// Convenience accessors never change a block's content case implicitly.
@@ -129,7 +144,7 @@ public struct DocumentBlock: Identifiable, Equatable, Sendable {
   }
 }
 
-public struct ImageContent: Equatable, Sendable {
+public struct ImageContent: Equatable, Codable, Sendable {
   public var assetName: String?
   public var data: Data?
   public var caption: String
@@ -148,7 +163,7 @@ public struct ImageContent: Equatable, Sendable {
   }
 }
 
-public struct TableContent: Equatable, Sendable {
+public struct TableContent: Equatable, Codable, Sendable {
   public var rows: [[String]]
   public var hasHeader: Bool
   public var rowIDs: [UUID]
@@ -172,7 +187,7 @@ public struct TableContent: Equatable, Sendable {
 }
 
 /// Immutable, explicitly identified history. It is not another writable current document.
-public struct ArticleVersion: Identifiable, Equatable, Sendable {
+public struct ArticleVersion: Identifiable, Equatable, Codable, Sendable {
   public let id: UUID
   public let title: String
   public let date: Date

@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import RedraftCore
@@ -5,10 +6,13 @@ import RedraftCore
 @MainActor
 final class WorkspaceViewModel: ObservableObject {
   @Published var state: WorkspaceState
-  let editorSession = EditorSession()
+  var composingInEditor = false
+  let exportMarkdown = PassthroughSubject<Void, Never>()
   private let store: WorkspaceStore
   private let reviewProvider: any ReviewProviding
   private var subscriptions: Set<AnyCancellable> = []
+  // A BlockNote undo can bring a removed block ID and its annotation scope back.
+  private var removedMarks: [UUID: String] = [:]
 
   init(store: WorkspaceStore, reviewProvider: any ReviewProviding) {
     self.store = store
@@ -18,9 +22,6 @@ final class WorkspaceViewModel: ObservableObject {
     self.state = state
     store.changes.sink { [weak self] _ in
       self?.reconcileState()
-      self?.objectWillChange.send()
-    }.store(in: &subscriptions)
-    editorSession.objectWillChange.sink { [weak self] _ in
       self?.objectWillChange.send()
     }.store(in: &subscriptions)
   }
@@ -35,7 +36,8 @@ final class WorkspaceViewModel: ObservableObject {
   var currentArticle: ArticleViewState? { currentSession.map(ArticleViewState.init(session:)) }
 
   var notice: String? {
-    state.notice ?? (state.dismissedAnnotationNotice == annotationNotice ? nil : annotationNotice)
+    store.persistenceNotice ?? state.notice
+      ?? (state.dismissedAnnotationNotice == annotationNotice ? nil : annotationNotice)
   }
 
   private var annotationNotice: String? {
@@ -88,6 +90,7 @@ final class WorkspaceViewModel: ObservableObject {
 
   func selectArticle(_ id: UUID) {
     guard articles.contains(where: { $0.id == id }) else { return }
+    if state.selectedArticleID != id { removedMarks.removeAll() }
     state.selectedArticleID = id
     state.section = .articles
     clearSelection()
@@ -100,13 +103,12 @@ final class WorkspaceViewModel: ObservableObject {
       state.articleQuery = ""
       selectArticle(article.id)
       state.sidebarVisible = false
-      state.formattingVisible = false
       selectBlock(article.blocks.first?.id)
     } catch { report(error) }
   }
 
   func deleteArticle(_ id: UUID) {
-    store.delete(id)
+    do { try store.delete(id) } catch { report(error) }
   }
 
   func renameArticle(_ title: String) {
@@ -135,93 +137,38 @@ final class WorkspaceViewModel: ObservableObject {
       block.kind == .text,
       isValid(range, in: block.text.string)
     else { return }
-    state.selectedBlockID = blockID
-    state.selectedRange = range
+    if state.selectedBlockID != blockID { state.selectedBlockID = blockID }
+    if state.selectedRange != range { state.selectedRange = range }
   }
 
+  /// A delayed WebKit message must not overwrite a different draft, an external edit or a review.
   @discardableResult
-  func updateBlockText(
-    _ id: UUID, text: NSAttributedString, expectedContent: RichTextContent? = nil,
-    articleID: UUID? = nil
-  ) -> Bool {
-    guard !isEditorLocked, let session = currentSession,
-      articleID == nil || articleID == session.document.id,
-      var block = currentArticle?.blocks.first(where: { $0.id == id }), block.kind == .text
+  func commitEditorBlocks(_ blocks: [DocumentBlock], articleID: UUID, basedOn revision: UUID)
+    -> Bool
+  {
+    guard !isEditorLocked, let session = currentSession, session.document.id == articleID,
+      session.document.revisionID == revision
     else { return false }
-    if let expectedContent, block.text.normalized() != expectedContent.normalized() {
-      showNotice("这段内容已在其他位置更新，请基于最新内容继续编辑")
-      return false
-    }
-    block.text = RichTextBridge.content(from: text)
+    let ids = Set(blocks.map(\.id))
+    let previousMarks = session.document.marks
     do {
-      try session.updateDocument { article in
-        guard let index = article.blocks.firstIndex(where: { $0.id == id }) else { return }
-        article.blocks[index] = block
+      try session.updateDocument(basedOn: revision) { article in
+        article.blocks = blocks
+        article.marks = previousMarks.filter { ids.contains($0.key) }
+        for (id, mark) in removedMarks where ids.contains(id) { article.marks[id] = mark }
       }
+      removedMarks = removedMarks.filter { !ids.contains($0.key) }
+      for (id, mark) in previousMarks where !ids.contains(id) { removedMarks[id] = mark }
+      return true
     } catch {
       report(error)
       return false
     }
-    if state.selectedBlockID == id && !isValid(state.selectedRange, in: text.string) {
-      state.selectedRange = NSRange(location: text.length, length: 0)
-    }
-    return true
   }
 
-  func mutateSelectedArticle(_ mutate: (inout Article) -> Void) {
+  private func mutateSelectedArticle(_ mutate: (inout Article) -> Void) {
     guard !isEditorLocked, let session = currentSession else { return }
     do { try session.updateDocument(mutate) } catch { report(error) }
-  }
-
-  func updateBlock(_ block: DocumentBlock) {
-    mutateSelectedArticle { article in
-      guard let index = article.blocks.firstIndex(where: { $0.id == block.id }) else { return }
-      article.blocks[index] = block
-    }
-  }
-
-  func insertBlock(_ block: DocumentBlock) {
-    guard !isEditorLocked else { return }
-    let selection = state.selectedBlockID
-    mutateSelectedArticle { article in
-      let index =
-        article.blocks.firstIndex(where: { $0.id == selection }).map { $0 + 1 }
-        ?? article.blocks.endIndex
-      article.blocks.insert(block, at: index)
-    }
-    selectBlock(block.id)
-  }
-
-  /// Resolve a writing position without changing the order of surrounding attachments.
-  func writingBlock(at edge: WritingEdge) -> DocumentBlock? {
-    guard !isEditorLocked, let session = currentSession else { return nil }
-    let blocks = session.document.blocks
-    if let block = edge == .start ? blocks.first : blocks.last, block.kind == .text {
-      return block
-    }
-    let paragraph = DocumentBlock()
-    do {
-      try session.updateDocument { article in
-        let index = edge == .start ? article.blocks.startIndex : article.blocks.endIndex
-        article.blocks.insert(paragraph, at: index)
-      }
-      return paragraph
-    } catch {
-      report(error)
-      return nil
-    }
-  }
-
-  func deleteBlock(_ id: UUID) {
-    guard !isEditorLocked, currentArticle?.blocks.contains(where: { $0.id == id }) == true else {
-      return
-    }
-    mutateSelectedArticle {
-      $0.blocks.removeAll { $0.id == id }
-      $0.marks.removeValue(forKey: id)
-      if $0.blocks.isEmpty { $0.blocks = [DocumentBlock(text: RichTextContent())] }
-    }
-    if state.selectedBlockID == id { selectBlock(nil) }
   }
 
   func markBlock(_ id: UUID, instruction: String) {
@@ -248,8 +195,41 @@ final class WorkspaceViewModel: ObservableObject {
     mutateSelectedArticle { $0.marks.removeAll() }
   }
 
+  /// An explicit, read-only handoff. Never includes other drafts, image bytes or past versions.
+  var agentExcerpt: String? {
+    guard !composingInEditor, let article = currentArticle, let block = selectedBlock else {
+      return nil
+    }
+    let text: String
+    if block.kind == .text, state.selectedRange.length > 0,
+      let range = try? block.text.range(forUTF16: state.selectedRange)
+    {
+      text = String(block.text.string[range])
+    } else if let image = block.image {
+      text = [image.altText, image.caption].filter { !$0.isEmpty }.joined(separator: "\n")
+    } else {
+      text = block.plainText
+    }
+    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+    return """
+      Redraft · \(article.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "未命名文章" : article.title)
+      文章：\(article.id)　基准版本：\(article.document.revisionID)　内容块：\(block.id)
+      要求：\(article.marks[block.id] ?? "请阅读以下摘录，区分建议和需要查证的事实；查证时附上出处。")
+
+      \(text)
+      """
+  }
+
+  func copyExcerptForAgent() {
+    guard let text = agentExcerpt else { return }
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    let copied = pasteboard.setString(text, forType: .string)
+    showNotice(copied ? "摘录已复制。粘贴到你选用的 Agent 会话即可；Redraft 没有发送稿件。" : "未能写入剪贴板。")
+  }
+
   func beginReview() {
-    guard !editorSession.hasMarkedText else {
+    guard !composingInEditor else {
       showNotice("先确认正在输入的文字，再请求批注")
       return
     }
@@ -382,11 +362,6 @@ final class WorkspaceViewModel: ObservableObject {
     case .rewrite:
       startRewrite()
       return
-    case .insertTable:
-      guard !isEditorLocked else { return }
-    case .imageDescription:
-      guard !isEditorLocked, let image = selectedBlock?.image else { return }
-      state.imageDescription = image.altText
     case .statistics:
       guard currentArticle != nil else { return }
     case .shortcuts, .about:
@@ -414,7 +389,7 @@ final class WorkspaceViewModel: ObservableObject {
   }
 
   private func clearSelection() {
-    editorSession.clear()
+    composingInEditor = false
     state.inspectorVisible = false
     state.inspectorTab = .marks
     state.selectedBlockID = nil
@@ -426,12 +401,12 @@ final class WorkspaceViewModel: ObservableObject {
     state.customInstruction = ""
     state.rewriteText = ""
     state.rewriteReason = ""
-    state.imageDescription = ""
   }
 
   /// Shared documents can change in another window while this window keeps its own selection.
   private func reconcileState() {
     guard let article = currentArticle else {
+      removedMarks.removeAll()
       state.selectedArticleID = articles.first?.id
       clearSelection()
       return
@@ -442,13 +417,11 @@ final class WorkspaceViewModel: ObservableObject {
           state.selectedRange = NSRange(location: block.text.string.utf16.count, length: 0)
         }
       } else {
-        editorSession.clear()
         state.selectedBlockID = nil
         state.selectedRange = NSRange(location: 0, length: 0)
-        if state.sheet == .customMark || state.sheet == .imageDescription {
+        if state.sheet == .customMark {
           dismissSheet()
           state.customInstruction = ""
-          state.imageDescription = ""
         }
       }
     }
