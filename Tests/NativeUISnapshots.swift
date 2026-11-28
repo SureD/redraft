@@ -1,4 +1,5 @@
 import AppKit
+import RedraftCore
 import SwiftUI
 import WebKit
 
@@ -11,7 +12,9 @@ struct NativeUISnapshots {
     let output = URL(
       fileURLWithPath: CommandLine.arguments.dropFirst().first ?? ".build/ui-snapshots")
     try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-    let model = try TestSupport.demoModel()
+    let model = try WorkspaceViewModel(
+      source: DemoWorkspaceContentSource(), reviewProvider: DemoReviewProvider(),
+      proofreadingProvider: RuleProofreadingProvider(), proofreadingDelay: .milliseconds(5))
     let host = NSHostingView(
       rootView: WorkspaceView(model: model).environment(
         \.documentImageResolver, DemoImageResolver()))
@@ -76,6 +79,13 @@ struct NativeUISnapshots {
 
     model.newArticle()
     try capture("new-article-light")
+    let freshBlockID = model.currentArticle!.blocks[0].id
+    TestSupport.replaceText(model, freshBlockID, "院子里的薄荷长得非常非常慢。")
+    try window.waitFor("The live proofreading panel has no suggestions") {
+      model.proofreadingSuggestions.contains { $0.blockID == freshBlockID }
+    }
+    try capture("proofreading-light")
+    try capture("proofreading-compact-dark", width: 780, dark: true)
     let balcony = model.articles.first { $0.title == "阳台的一年" }!
     model.selectArticle(balcony.id)
     model.state.sidebarVisible = true
@@ -89,10 +99,14 @@ struct NativeUISnapshots {
     model.enterReview()
     try capture("annotations-light")
     try capture("annotations-compact", width: 780)
+    try capture("annotations-dark", dark: true)
     precondition(model.currentArticle?.blocks == pending.blocks)
     model.showExamples()
     try capture("examples-light")
     model.newArticle()
     try capture("new-article-compact", width: 780)
+    model.showExamples()
+    model.state.sidebarVisible = true
+    try capture("library-compact", width: 780)
   }
 }

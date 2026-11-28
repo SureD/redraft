@@ -26,7 +26,6 @@ struct ArticleViewState: Identifiable {
   var marks: [UUID: String] { document.marks }
   var changes: [ReviewChange] { review.changes }
   var characterCount: Int { blocks.reduce(0) { $0 + $1.plainText.count } }
-  var preview: String { blocks.first(where: { $0.kind == .text })?.plainText ?? "空白文章" }
   var phase: ArticlePhase {
     switch review {
     case .idle, .noSuggestions, .failed: .idle

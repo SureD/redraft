@@ -5,35 +5,102 @@ import RedraftCore
 
 @MainActor
 final class WorkspaceViewModel: ObservableObject {
-  @Published var state: WorkspaceState
+  @Published var state: WorkspaceState {
+    didSet {
+      if oldValue.selectedArticleID != state.selectedArticleID || oldValue.section != state.section
+      {
+        pendingProofreadingEdit = nil
+        proofreadingApplyingID = nil
+        refreshProofreading()
+      }
+    }
+  }
   var composingInEditor = false
   let exportMarkdown = PassthroughSubject<Void, Never>()
+  let proofreadingEditRequested = PassthroughSubject<ProofreadingEdit, Never>()
+  @Published private(set) var proofreadingApplyingID: UUID?
   private let store: WorkspaceStore
   private let reviewProvider: any ReviewProviding
+  private let proofreading: ProofreadingSession
+  private var pendingProofreadingEdit: ProofreadingEdit?
   private var subscriptions: Set<AnyCancellable> = []
   // A BlockNote undo can bring a removed block ID and its annotation scope back.
   private var removedMarks: [UUID: String] = [:]
 
-  init(store: WorkspaceStore, reviewProvider: any ReviewProviding) {
+  init(
+    store: WorkspaceStore, reviewProvider: any ReviewProviding,
+    proofreadingProvider: (any ProofreadingProviding)? = nil,
+    proofreadingDelay: Duration = .milliseconds(750)
+  ) {
     self.store = store
     self.reviewProvider = reviewProvider
+    proofreading = ProofreadingSession(provider: proofreadingProvider, delay: proofreadingDelay)
     var state = WorkspaceState()
     state.selectedArticleID = store.sessions.first?.document.id
     self.state = state
     store.changes.sink { [weak self] _ in
       self?.reconcileState()
+      self?.refreshProofreading()
       self?.objectWillChange.send()
     }.store(in: &subscriptions)
+    proofreading.objectWillChange.sink { [weak self] _ in
+      self?.objectWillChange.send()
+    }.store(in: &subscriptions)
+    refreshProofreading()
   }
 
-  convenience init(source: any WorkspaceContentSource, reviewProvider: any ReviewProviding) throws {
-    try self.init(store: WorkspaceStore(seed: source.load()), reviewProvider: reviewProvider)
+  convenience init(
+    source: any WorkspaceContentSource, reviewProvider: any ReviewProviding,
+    proofreadingProvider: (any ProofreadingProviding)? = nil,
+    proofreadingDelay: Duration = .milliseconds(750)
+  ) throws {
+    try self.init(
+      store: WorkspaceStore(seed: source.load()), reviewProvider: reviewProvider,
+      proofreadingProvider: proofreadingProvider, proofreadingDelay: proofreadingDelay)
   }
 
   var articles: [ArticleViewState] { store.sessions.map(ArticleViewState.init(session:)) }
   var examples: [RewriteExample] { store.examples }
   private var currentSession: ArticleSession? { store.session(for: state.selectedArticleID) }
   var currentArticle: ArticleViewState? { currentSession.map(ArticleViewState.init(session:)) }
+
+  var proofreadingStatus: ProofreadingStatus { proofreading.status }
+  var proofreadingSuggestions: [ProofreadingSuggestion] { proofreading.suggestions }
+  var proofreadingSource: ProofreadingSource? { proofreading.source }
+
+  func retryProofreading() { proofreading.retry() }
+
+  func dismissProofreadingSuggestion(_ suggestion: ProofreadingSuggestion) {
+    proofreading.dismiss(suggestion)
+  }
+
+  func applyProofreadingSuggestion(_ suggestion: ProofreadingSuggestion) {
+    guard pendingProofreadingEdit == nil, !isEditorLocked, let document = currentSession?.document
+    else { return }
+    guard !composingInEditor else {
+      showNotice("请先确认正在输入的文字，再应用建议。")
+      return
+    }
+    guard let edit = proofreading.edit(for: suggestion, in: document) else {
+      showNotice("这段文字已有改动，正在检查最新正文。")
+      return
+    }
+    pendingProofreadingEdit = edit
+    proofreadingApplyingID = suggestion.id
+    proofreadingEditRequested.send(edit)
+  }
+
+  func proofreadingEditFinished(_ edit: ProofreadingEdit, applied: Bool) {
+    guard pendingProofreadingEdit == edit else { return }
+    pendingProofreadingEdit = nil
+    proofreadingApplyingID = nil
+    if !applied { showNotice("未能应用这条建议，请查看当前正文后重试。") }
+  }
+
+  private func refreshProofreading() {
+    let shouldRead = state.section == .articles && !isEditorLocked
+    proofreading.update(shouldRead ? currentSession?.document : nil)
+  }
 
   var notice: String? {
     store.persistenceNotice ?? state.notice
@@ -58,7 +125,7 @@ final class WorkspaceViewModel: ObservableObject {
 
   var filteredArticles: [ArticleViewState] {
     let query = state.articleQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    return articles.filter {
+    return store.librarySessions.map(ArticleViewState.init(session:)).filter {
       query.isEmpty || $0.displayTitle.localizedCaseInsensitiveContains(query)
         || $0.blocks.contains { $0.plainText.localizedCaseInsensitiveContains(query) }
     }

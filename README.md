@@ -1,6 +1,6 @@
 # Redraft
 
-Redraft 是一款原生 macOS 伴随式写作编辑器。先写正文，再请 AI 批注，等作者读完并选定改动后形成下一稿。
+Redraft 是一款原生 macOS 伴随式写作编辑器。左边写正文，右边的 Redraft 助手随落笔给出建议，由作者逐条决定哪些改动进入稿件。
 
 ## 运行 Swift 原型
 
@@ -8,13 +8,13 @@ Redraft 是一款原生 macOS 伴随式写作编辑器。先写正文，再请 A
 
 整篇正文由[开源 BlockNote](https://github.com/TypeCellOS/BlockNote) 编辑；窗口、文章库、批注和改稿历史仍是原生 Mac 客户端。编辑器和样式随 App 发布，不需要 Node 运行时、CDN 或本地服务器。插图只从本地导入。在「更多 → 导出 Markdown 和附件…」里选择目录，可同时带走正文及图片；Markdown 是交换格式，不用来恢复批注与历史。
 
-要试批注流程，可写「院子里的薄荷长得非常非常慢。」再点「试读示例批注」。应用会给出一条本地示例建议，你确认成稿后才会改动原文。要用自己的助手，可点「更多 → 复制摘录给 Agent」，把当前段落或选中的文字、文章 ID、版本、块 ID 和批注要求粘贴到自己的会话。
+启动时右侧直接打开「Redraft 助手」。写下几句，停笔片刻就会开始检查。看到想要的改法，点「应用到正文」立即替换相应文字，按 `⌘Z` 可撤销。在支持并启用了 Apple Intelligence 的 Mac 上使用系统本机模型，其他情况下显示「本机基础检查」。仍可在「更多」中复制选区给自己的 Agent，或查看已有的待处理批注。
 
 - Core 的 `Article`、`DocumentBlock`、语义富文本、版本和审阅类型是统一数据契约；`ArticleSession` 持有一篇文章的当前文档、版本快照、本轮批注和历轮成稿，文档修改只能经会话提交。标题、图片、表格、格式和标记均属于同一份文档状态。
 - `WorkspaceStore` 持有文章会话集合和改写范例；`WorkspaceViewModel` 观察 Store，计算只读 `ArticleViewState`、筛选结果与统计。`WorkspaceState` 只保存当前窗口的选择、搜索、侧栏与弹窗草稿，不再复制正文。
 - `BlockNoteDocument` 在编辑页结构与带 ID 的 Core 文档之间转换。正文、附件和批注决策由文章会话负责；只有明确选择的新稿或外部正文更新才会重建编辑页。
 - 本地数据库默认在 `~/Library/Application Support/Redraft/Library.sqlite3`，开发时可用环境变量 `REDRAFT_LIBRARY_PATH` 指定独立的绝对文件路径。生产启动不填充示例稿；演示文章、插画和改稿规则在 `App/Preview` 中供注入与测试。
-- 真实 Agent 接入、后台查证和自动归类仍待实现。原生侧栏和检查器跟随系统深浅色，写作时默认收起。
+- 外部 Agent 会话接入、后台查证和自动归类属于后续工作。文章库默认收起；宽窗在左侧显示，窄窗打开抽屉，点选稿件后回到正文。Redraft 助手默认展开，跟随系统深浅色。
 
 [开发流程](devflow.md)
 
@@ -30,6 +30,7 @@ Redraft 是一款原生 macOS 伴随式写作编辑器。先写正文，再请 A
 | `Packages/RedraftCore/Sources/RedraftCore/BlockNoteDocument.swift` | 块树与现有文字、图片、表格及其身份之间的转换 |
 | `App/Models/WorkspaceStore.swift` 与 `App/Models/SQLiteLibrary.swift` | 文章会话及改写范例的所有者，本机事务保存与恢复 |
 | `App/Models/WorkspaceState.swift` | 窗口交互状态，不存文章正文 |
+| `App/Models/ProofreadingSession.swift` 与 `App/Review/ProofreadingProvider.swift` | 后台检查当前段落，过滤已过期的建议，调用本机模型或基础规则 |
 | `App/Models/ArticleViewState.swift` | 从会话产生的只读界面投影 |
 | `App/Models/WorkspaceContentSource.swift` | 初始文章来源的注入接口 |
 | `App/RedraftApp.swift` | 本次运行使用哪些来源和服务的装配入口 |
@@ -49,11 +50,11 @@ Redraft 是一款原生 macOS 伴随式写作编辑器。先写正文，再请 A
 | `make architecture` | 更新可离线打开的架构页面 |
 | `make monitor` | 启动本机需求运行看板，查看 Agent 分工、待决策事项和验收记录 |
 | `make test` | 验证 Core 文档不变量、版本与审阅状态、异步取消和过期结果隔离 |
-| `make test-ui` | 验证注入数据源、共享会话、窗口状态隔离、批注阅读及成稿 |
-| `make test-editor` | 在真实 WKWebView 中验证首焦点、编辑、撤销、组字冲突、图表和 Markdown 导出 |
+| `make test-ui` | 验证注入数据、共享会话、过期润色建议的隔离、批注阅读与成稿 |
+| `make test-editor` | 在真实 WKWebView 中验证首焦点、编辑、组字、润色应用与撤销、图表和 Markdown 导出 |
 | `npm --prefix WebEditor test` | 对打包资源运行浏览器交互测试，需要先 `make web-editor`，以及本机安装的 Chrome 或环境变量 `REDRAFT_CHROME` 指定的 Chromium |
 | `make test-library` | 在临时 SQLite 库中验证保存、关闭重开、删除和错误处理 |
-| `make snapshots` | 渲染真实原生视图，检查正文编辑器与系统材质并输出深浅色和窄窗截图到 `.build/ui-snapshots` |
+| `make snapshots` | 渲染真实原生视图，输出写作、文章库和批注的深浅色与窄窗截图到 `.build/ui-snapshots` |
 | `make lint` | 按随 Xcode 提供的 swift-format 默认规范检查全部 Swift 源码 |
 
 [产品规划](design.md) · [技术讨论](technical.md) · [架构视图](architecture.html) · [开发流程](devflow.md) · [开发日志](devlog/README.md)

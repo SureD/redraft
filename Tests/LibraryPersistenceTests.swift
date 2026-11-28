@@ -48,6 +48,9 @@ struct LibraryPersistenceTests {
     try session.updateDocument { $0.blocks[0].text = RichTextContent() }
     try store.flush()
     try expect(
+      store.librarySessions.contains { $0.document.id == paper.id },
+      "A previously saved draft remains in the library after its text is cleared")
+    try expect(
       try requireSession(paper.id, in: WorkspaceStore(libraryAt: url)).document == session.document,
       "Clearing an existing draft is not deletion")
   }

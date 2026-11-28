@@ -14,17 +14,18 @@ struct WorkspaceCommands: Commands {
       Button("文章库") { model.state.sidebarVisible.toggle() }
         .keyboardShortcut("s", modifiers: [.command, .control])
       Divider()
-      Button(model.currentArticle?.phase == .ready ? "阅读本轮批注" : "试读示例批注") {
+      Button(model.currentArticle?.phase == .ready ? "阅读本轮批注" : "显示 Redraft 助手") {
         if model.currentArticle?.phase == .ready {
           model.enterReview()
         } else {
-          model.beginReview()
+          model.state.inspectorVisible = false
+          model.state.proofreadingVisible = true
         }
       }
       .keyboardShortcut(.return, modifiers: .command)
       .disabled(
         model.state.section != .articles || model.state.sheet != nil
-          || !(model.canRequestAnnotations || model.currentArticle?.phase == .ready))
+          || model.currentArticle == nil)
       Button("段落轨迹", action: model.showProvenance)
         .disabled(model.state.section != .articles || model.selectedBlock == nil)
     }

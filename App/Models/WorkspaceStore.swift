@@ -7,6 +7,7 @@ import RedraftCore
 final class WorkspaceStore: ObservableObject {
   @Published private(set) var sessions: [ArticleSession] = []
   @Published private var orderedExamples: [LibraryArticle.Example] = []
+  var librarySessions: [ArticleSession] { sessions.filter { isInLibrary($0) } }
   var examples: [RewriteExample] { orderedExamples.map(\.value) }
   /// Unlike objectWillChange, this signal always sees the committed collection/session values.
   let changes = PassthroughSubject<Void, Never>()
@@ -121,7 +122,7 @@ final class WorkspaceStore: ObservableObject {
 
   private func sessionChanged(_ session: ArticleSession) {
     let id = session.document.id
-    if library != nil, saved[id] != nil || dirty.contains(id) || !isBlankPaper(session) {
+    if library != nil, isInLibrary(session) {
       dirty.insert(id)
       // Throttle rather than debounce indefinitely: continuous typing still reaches disk.
       if saveTask == nil {
@@ -133,6 +134,11 @@ final class WorkspaceStore: ObservableObject {
     }
     objectWillChange.send()
     changes.send()
+  }
+
+  private func isInLibrary(_ session: ArticleSession) -> Bool {
+    let id = session.document.id
+    return saved[id] != nil || dirty.contains(id) || !isBlankPaper(session)
   }
 
   private func isBlankPaper(_ session: ArticleSession) -> Bool {

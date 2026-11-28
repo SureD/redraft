@@ -101,6 +101,68 @@ test("hydration is silent; UTF-16 selection, review highlights and editability p
   assert.equal((await changes(p)).at(-1).blocks[0].content[0].text, "甲🍃乙");
 });
 
+test("a proofreading replacement keeps marks and is isolated from typing on both sides of undo", async t => {
+  const p = await pageFor(t);
+  await open(p, [paragraph(a, [
+    { type: "text", text: "甲🪴", styles: { italic: true } },
+    { type: "text", text: "非常非常慢", styles: { bold: true } },
+  ]), paragraph(b, "第二段")]);
+  await p.evaluate(() => {
+    window.instance = document.querySelector(".bn-editor");
+    const text = window.instance.querySelector("strong").firstChild;
+    window.getSelection().collapse(text, text.length);
+  });
+  await p.keyboard.insertText("。");
+  await p.waitForFunction(() => window.messages.some(m => m.kind === "change"));
+  const typed = (await changes(p)).at(-1);
+  const edit = { token: "draft", version: typed.version, requestID: "proof-1", blockID: a,
+    paragraph: "甲🪴非常非常慢。", original: "非常非常慢", replacement: "很慢" };
+  assert.equal(await p.evaluate(edit => window.redraft.applyProofreading(edit), { ...edit, version: 0 }), false);
+  assert.equal(await p.evaluate(edit => window.redraft.applyProofreading(edit), { ...edit, paragraph: "旧段落" }), false);
+  assert.equal(await p.evaluate(edit => window.redraft.applyProofreading(edit), { ...edit, original: "非常" }), false);
+  assert.equal(await p.evaluate(edit => window.redraft.applyProofreading(edit), { ...edit, token: "old" }), false);
+  assert.deepEqual(await changes(p), [typed]);
+  assert.equal(await p.evaluate(edit => window.redraft.applyProofreading(edit), edit), true);
+  const applied = (await changes(p)).at(-1);
+  assert.equal(applied.proofreadingID, "proof-1");
+  assert.equal(applied.version, typed.version + 1);
+  assert.deepEqual(applied.blocks[0].content, [
+    { type: "text", text: "甲🪴", styles: { italic: true } },
+    { type: "text", text: "很慢。", styles: { bold: true } },
+  ]);
+  assert.deepEqual(applied.blocks[1], typed.blocks[1]);
+  assert.equal(await p.evaluate(() => document.activeElement === window.instance), true);
+  await p.keyboard.insertText("！");
+  assert.equal((await changes(p)).at(-1).proofreadingID, undefined);
+  await p.keyboard.press(`${mod}+z`);
+  assert.deepEqual((await changes(p)).at(-1).blocks, applied.blocks);
+  await p.keyboard.press(`${mod}+z`);
+  assert.deepEqual((await changes(p)).at(-1).blocks, typed.blocks);
+  await p.keyboard.press(`${mod}+z`);
+  assert.equal((await changes(p)).at(-1).blocks[0].content.at(-1).text, "非常非常慢");
+});
+
+test("proofreading refuses an active IME candidate and cannot cross a soft break", async t => {
+  const p = await pageFor(t);
+  await open(p, [paragraph(a, "非常慢")]);
+  const edit = { token: "draft", version: 0, requestID: "proof-2", blockID: a,
+    paragraph: "非常慢", original: "非常", replacement: "很" };
+  const cdp = await p.context().newCDPSession(p);
+  await cdp.send("Input.imeSetComposition", { text: "ni", selectionStart: 2, selectionEnd: 2 });
+  await p.waitForFunction(() => window.messages.some(m => m.kind === "composition" && m.active));
+  assert.equal(await p.evaluate(edit => window.redraft.applyProofreading(edit), edit), false);
+  assert.deepEqual(await changes(p), []);
+  await cdp.send("Input.insertText", { text: "你" });
+  await p.waitForFunction(() => window.messages.some(m => m.kind === "composition" && !m.active));
+  await open(p, [paragraph(a, "可修\n下一行")], { token: "soft-break" });
+  assert.equal(await p.locator('.bn-editor br').first().count(), 1);
+  const softBreak = { ...edit, token: "soft-break", paragraph: "可修\n下一行", original: "修\n下" };
+  assert.equal(await p.evaluate(edit => window.redraft.applyProofreading(edit), softBreak), false);
+  assert.equal(await p.evaluate(edit => window.redraft.applyProofreading(edit), { ...softBreak, original: "可修" }), true);
+  const applied = (await changes(p)).at(-1);
+  assert.equal(applied.blocks[0].content[0].text, "很\n下一行");
+});
+
 test("rich paste preserves nested formatting and links, ignores remote images and uses one undo history", async t => {
   const p = await pageFor(t);
   await open(p, [paragraph(a)]);
@@ -126,6 +188,8 @@ test("rich paste preserves nested formatting and links, ignores remote images an
 test("the Chinese slash menu inserts an editable real table; image panel only offers local raster upload", async t => {
   const p = await pageFor(t);
   await open(p, [paragraph(a)]);
+  assert.equal(await p.locator('.bn-editor .bn-block-content').evaluate(block =>
+    getComputedStyle(block, '::after').content), '"开始写作…"');
   await p.keyboard.type("/");
   const menu = p.getByRole("listbox");
   await menu.getByText("表格", { exact: true }).click();

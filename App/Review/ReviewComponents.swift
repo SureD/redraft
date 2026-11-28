@@ -10,37 +10,24 @@ struct ReviewEmptyState: View {
   var action: (() -> Void)? = nil
 
   var body: some View {
-    VStack(spacing: 14) {
+    VStack(spacing: 12) {
       Image(systemName: symbol)
-        .font(.system(size: 30, weight: .light))
-        .foregroundStyle(.secondary)
+        .font(.system(size: 24, weight: .light))
+        .foregroundStyle(PaperTheme.secondaryText)
+        .accessibilityHidden(true)
       Text(title).font(.title3.weight(.medium))
       if !detail.isEmpty {
         Text(detail)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(PaperTheme.secondaryText)
           .multilineTextAlignment(.center)
           .font(.callout)
       }
       if let actionTitle, let action {
-        Button(actionTitle, action: action).padding(.top, 6)
+        Button(actionTitle, action: action).padding(.top, 4)
       }
     }
     .padding(32)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-  }
-}
-
-struct ReviewTag: View {
-  let title: String
-  var color: Color = .secondary
-
-  var body: some View {
-    Text(title)
-      .font(.caption)
-      .foregroundStyle(color)
-      .padding(.horizontal, 7)
-      .padding(.vertical, 3)
-      .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
   }
 }
 
@@ -49,9 +36,10 @@ struct LabeledPassage<Content: View>: View {
   @ViewBuilder var content: Content
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      Text(title).font(.caption).foregroundStyle(.secondary)
-      content.font(.callout).lineSpacing(5)
+    VStack(alignment: .leading, spacing: 8) {
+      Text(title).font(.caption.weight(.medium)).foregroundStyle(PaperTheme.secondaryText)
+        .accessibilityAddTraits(.isHeader)
+      content.font(.callout).lineSpacing(4)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -123,32 +111,44 @@ struct ReviewDecisionButtons: View {
   @ObservedObject var model: WorkspaceViewModel
   let change: ReviewChange
   var body: some View {
-    HStack(spacing: 7) {
+    HStack(spacing: 4) {
       decisionButton(.accept, symbol: "checkmark", label: "采用")
       decisionButton(.keep, symbol: "arrow.uturn.backward", label: "保留原文")
       if change.kind == .text {
-        Button {
-          model.decide(.rewrite, changeID: change.id)
-        } label: {
-          Label("重写", systemImage: "pencil")
-        }
-        .tint(change.decision == .rewrite ? PaperTheme.accent : .secondary)
-        .help("自己重写这处修改")
+        decisionButton(.rewrite, symbol: "pencil", label: "重写")
+          .help("自己重写这处修改")
       }
     }
-    .buttonStyle(.bordered)
-    .controlSize(.small)
   }
 
   private func decisionButton(_ decision: ReviewDecision, symbol: String, label: String)
     -> some View
   {
-    Button {
+    let selected = change.decision == decision
+    return Button {
       model.decide(decision, changeID: change.id)
     } label: {
-      Label(label, systemImage: symbol)
+      HStack(spacing: 4) {
+        Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
+        Text(label).font(.system(size: 12, weight: selected ? .semibold : .medium))
+      }
+      .lineLimit(1)
+      .fixedSize(horizontal: true, vertical: false)
+      .padding(.horizontal, 4)
+      .frame(maxWidth: .infinity, minHeight: 32)
+      .foregroundStyle(selected ? PaperTheme.accent : PaperTheme.ink)
+      .background(
+        selected ? PaperTheme.selection : PaperTheme.fill, in: RoundedRectangle(cornerRadius: 8)
+      )
+      .overlay {
+        if selected {
+          RoundedRectangle(cornerRadius: 8).strokeBorder(PaperTheme.accent.opacity(0.5))
+        }
+      }
+      .contentShape(Rectangle())
     }
-    .tint(change.decision == decision ? PaperTheme.accent : .secondary)
-    .accessibilityLabel("\(label)这处修改\(change.decision == decision ? "，已选" : "")")
+    .buttonStyle(.plain)
+    .accessibilityLabel(decision == .rewrite ? label : "\(label)这处修改")
+    .accessibilityAddTraits(selected ? .isSelected : [])
   }
 }

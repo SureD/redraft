@@ -33,6 +33,28 @@ struct EditorInteractionTests {
     try window.waitFor("Typed text did not reach the native session") {
       model.currentArticle?.blocks.first?.plainText == original
     }
+    _ = try window.js("window.beforeProofreading = document.querySelector('.ProseMirror'); true")
+    let proofread = ProofreadingEdit(
+      articleID: draft, revisionID: model.currentArticle!.document.revisionID, blockID: first,
+      paragraph: original, original: "非常非常慢", replacement: "很慢")
+    model.proofreadingEditRequested.send(proofread)
+    try window.waitFor("A proofreading change must commit through the active WebKit page") {
+      model.currentArticle?.blocks.first?.plainText == "院子里的薄荷长得很慢。"
+    }
+    try window.waitFor("Applying a suggestion must return focus to the same editor") {
+      try window.js("document.activeElement === window.beforeProofreading") as? Bool == true
+    }
+    _ = try window.js(
+      "document.querySelector('.ProseMirror').dispatchEvent(new KeyboardEvent('keydown',{key:'z',code:'KeyZ',keyCode:90,metaKey:true,bubbles:true,cancelable:true}))"
+    )
+    try window.waitFor("Undo must restore the original paragraph in a single step") {
+      model.currentArticle?.blocks.first?.plainText == original
+    }
+    model.proofreadingEditRequested.send(proofread)
+    try expect(
+      try window.js("document.querySelector('.ProseMirror').textContent.includes('\(original)')")
+        as? Bool == true,
+      "The old revision must not apply again after undo")
     let revision = model.currentArticle!.document.revisionID
     model.renameArticle("薄荷手记")
     model.markBlock(first, instruction: "更简洁")
@@ -167,7 +189,7 @@ struct EditorInteractionTests {
         && assets.data(for: URL(fileURLWithPath: "/tmp/example.png")) == nil,
       "An image handle cannot introduce arbitrary files or non-image bytes")
     print(
-      "Real BlockNote window: focus, Chinese/emoji, split, undo, IME guard, review, local image/table and article switching passed"
+      "Real BlockNote window: focus, Chinese/emoji, split, undo, IME guard, proofreading, review, local image/table and article switching passed"
     )
   }
 

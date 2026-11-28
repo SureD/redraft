@@ -58,7 +58,8 @@ export function createEditor(blocks: Blocks, uploadFile: (file: File) => Promise
   }
   validateImages(blocks);
   return BlockNoteEditor.create({
-    schema, initialContent: blocks, dictionary: zh, uploadFile,
+    schema, initialContent: blocks, uploadFile,
+    dictionary: { ...zh, placeholders: { ...zh.placeholders, default: "开始写作…" } },
     extensions: [documentPolicy], animations: false, selectAllBehavior: "document",
     domAttributes: { editor: { "aria-label": "正文", "aria-multiline": "true", role: "textbox", lang: "zh-CN" } },
     links: {

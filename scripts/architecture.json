@@ -1,6 +1,6 @@
 {
   "reviewedAt": "2026-11-28",
-  "reviewedSourceHash": "bf4c51493a6814ed784b1fa5286e93b4a4dd21c28c72e0c9379e7c40c512ad65",
+  "reviewedSourceHash": "8323da3864a627be0da6322b8ea337ba709e6619e4b1f7b8cc057dcf4e390845",
   "packageDependency": {
     "from": "App",
     "to": "RedraftCore",
@@ -13,7 +13,7 @@
       "subtitle": "RedraftApp",
       "layer": "app",
       "status": "implemented",
-      "summary": "SwiftUI 打开本机 SQLite 稿库，创建写作窗口和一张空稿纸，装配示例批注服务。",
+      "summary": "SwiftUI 打开本机 SQLite 稿库，创建空稿和右侧 Redraft 助手，装配设备端检查。",
       "files": [
         "App/RedraftApp.swift",
         "project.yml"
@@ -65,6 +65,7 @@
         "WebEditor/package.json",
         "App/Workspace/WorkspaceView.swift",
         "App/Review/AnnotationPanel.swift",
+        "App/Review/ProofreadingPanel.swift",
         "App/Review/BlockTrailPanel.swift",
         "App/Review/InspectorView.swift",
         "App/Shared/PaperTheme.swift",
@@ -85,7 +86,8 @@
         "同一编辑器处理文本、列表、图片及表格，支持选区排版、粘贴、斜杠菜单和整篇撤销",
         "组字确认后按文章与基准版本提交，保留既有批注的块身份",
         "本地资源加载和图片导入，正文中的图片引用使用资源标识",
-        "读批注时高亮对应块，作者成稿后刷新正文"
+        "深浅色主题统一原生标题和正文版式，批注按需打开并高亮对应块",
+        "随写润色逐条应用并独立撤销，已有整轮批注可单独成稿"
       ],
       "next": [
         "实机验证系统拼音候选窗的确认和取消",
@@ -119,6 +121,8 @@
       "status": "implemented",
       "summary": "Store 连接会话和本机稿库。ViewModel 处理整篇正文提交、段落摘录和按正文检索，各窗口独立维护当前选区。",
       "files": [
+        "App/Workspace/ArticleSidebar.swift",
+        "App/Models/ProofreadingSession.swift",
         "App/Models/WorkspaceState.swift",
         "App/Models/WorkspaceStore.swift",
         "App/Models/ArticleViewState.swift",
@@ -135,9 +139,11 @@
         "WorkspaceContentSource"
       ],
       "done": [
-        "创建空稿，按标题或任一块的正文检索，无标题稿在列表中用正文首行显示",
+        "创建空稿，动笔后进入文章库，可按标题或任一块的正文检索，无标题稿用正文首行显示",
+        "文章库在宽窗内嵌，窄窗使用抽屉，切换稿件后回到正文",
         "共享会话提交后校正窗口中的文章、选区、审阅与弹窗引用",
-        "按文章 ID 与修订号校验整篇编辑，提供手动复制当前摘录的动作"
+        "按文章 ID 与修订号校验整篇编辑，提供手动复制当前摘录的动作",
+        "按段检查并隔离过期建议，采用时核对当前原文"
       ],
       "next": [
         "按主题整理稿件并关联同一系列的文章"
@@ -158,6 +164,10 @@
         {
           "file": "App/Models/ArticleViewState.swift",
           "needle": "struct ArticleViewState: Identifiable"
+        },
+        {
+          "file": "App/Workspace/ArticleSidebar.swift",
+          "needle": "struct ArticleSidebar: View"
         }
       ],
       "definition": "持有窗口交互状态，观察文档会话并计算 UI 所需的展示值。"
@@ -372,20 +382,23 @@
     },
     {
       "id": "ai",
-      "title": "Agent 与示例批注",
-      "subtitle": "按段摘录 · ReviewProviding",
+      "title": "本机润色与 Agent",
+      "subtitle": "FoundationModels · 按段摘录",
       "layer": "adapters",
       "status": "partial",
-      "summary": "作者可以将选中摘录复制到自己的 Agent 会话。应用内示例通过 ReviewProviding 演示批注取舍。",
+      "summary": "设备端语言模型检查基础行文，无法推理时给出标明来源的规则建议。作者仍可将摘录复制到自己的 Agent 会话。",
       "files": [
         "App/ViewModels/WorkspaceViewModel.swift",
+        "App/Review/ProofreadingProvider.swift",
         "App/Preview/DemoWorkspaceContentSource.swift"
       ],
       "symbols": [
         "agentExcerpt",
+        "LocalProofreadingProvider",
         "DemoReviewProvider"
       ],
       "done": [
+        "用 Apple Intelligence 在设备上润色基础行文，保留本机规则备用路径",
         "复制当前选区或内容块、文章 ID、修订号、块 ID 和作者要求",
         "本地示例可经审阅流程展示并由作者确认"
       ],
@@ -395,6 +408,10 @@
       ],
       "evidence": [
         {
+          "file": "App/Review/ProofreadingProvider.swift",
+          "needle": "struct LocalProofreadingProvider: ProofreadingProviding"
+        },
+        {
           "file": "App/ViewModels/WorkspaceViewModel.swift",
           "needle": "func copyExcerptForAgent()"
         },
@@ -403,7 +420,7 @@
           "needle": "struct DemoReviewProvider: ReviewProviding"
         }
       ],
-      "definition": "向外部 Agent 提供写作上下文，接收批注与查证资料。"
+      "definition": "在本机生成润色建议，并为外部深入读稿提供作者选中的上下文。"
     },
     {
       "id": "library",
@@ -538,6 +555,16 @@
       "evidence": {
         "file": "App/Preview/DemoWorkspaceContentSource.swift",
         "needle": "struct DemoReviewProvider: ReviewProviding"
+      }
+    },
+    {
+      "from": "workspace",
+      "to": "ai",
+      "kind": "actual",
+      "label": "分批读取当前稿",
+      "evidence": {
+        "file": "App/Models/ProofreadingSession.swift",
+        "needle": "let result = try await provider.suggestions(for: batch)"
       }
     },
     {

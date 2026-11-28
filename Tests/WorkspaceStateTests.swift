@@ -22,7 +22,93 @@ struct WorkspaceStateTests {
     try await sharedReviewLifecycle()
     try sharedReferencesStayValid()
     try await injectedReviewResultsAndFailures()
-    print("Workspace UI state: 15 scenarios passed")
+    try await proofreadingFollowsCurrentDraft()
+    print("Workspace UI state: 16 scenarios passed")
+  }
+
+  @MainActor
+  private static func proofreadingFollowsCurrentDraft() async throws {
+    let prior = Article(title: "旧稿", blocks: [DocumentBlock(text: .init(string: "旧稿独有。"))])
+    let fresh = Article(title: "新稿", blocks: [DocumentBlock()])
+    let model = try WorkspaceViewModel(
+      source: TestSupport.Source(
+        seed: WorkspaceSeed(
+          articles: [prior, fresh].map {
+            ArticleSeed(document: $0)
+          })),
+      reviewProvider: NoReviewProvider(), proofreadingProvider: DelayedProofreader(),
+      proofreadingDelay: .milliseconds(5))
+    try expect(model.state.proofreadingVisible, "The live proofreading pane starts open")
+    try await awaitProofreading("Old draft never started reading", model, status: .checking)
+    model.selectArticle(fresh.id)
+    try expect(
+      model.proofreadingStatus == .waitingForText, "Switching clears the old draft's reading")
+    let blockID = fresh.blocks[0].id
+    TestSupport.replaceText(model, blockID, "新稿独有。")
+    try expect(!model.isEditorLocked, "The author can keep writing while the text is checked")
+    try await awaitProofreading("Fresh draft never finished reading", model, status: .upToDate)
+    guard let suggestion = model.proofreadingSuggestions.first else {
+      throw PaperTestFailure(message: "Fresh suggestion missing")
+    }
+    try expect(
+      suggestion.blockID == blockID && model.proofreadingSuggestions.count == 1,
+      "A superseded asynchronous result must not appear in another article")
+
+    var requested: [ProofreadingEdit] = []
+    let observation = model.proofreadingEditRequested.sink { requested.append($0) }
+    defer { observation.cancel() }
+    model.composingInEditor = true
+    model.applyProofreadingSuggestion(suggestion)
+    try expect(requested.isEmpty, "Active IME blocks applying a suggestion")
+    model.composingInEditor = false
+    model.applyProofreadingSuggestion(suggestion)
+    guard let edit = requested.last else {
+      throw PaperTestFailure(message: "A current suggestion must be sent to the editor")
+    }
+    try expect(
+      edit.articleID == fresh.id && edit.paragraph == "新稿独有。"
+        && model.currentArticle?.blocks[0].plainText == edit.paragraph,
+      "Only the editor transaction can modify the document, after an explicit apply")
+    model.proofreadingEditFinished(edit, applied: false)
+    TestSupport.replaceText(model, blockID, "作者改了这句话。")
+    try expect(
+      model.proofreadingSuggestions.isEmpty, "An edited paragraph invalidates its suggestions")
+    model.applyProofreadingSuggestion(suggestion)
+    try expect(requested.count == 1, "The stale suggestion cannot mutate current text")
+    try await awaitProofreading("Edited draft never finished reading", model, status: .upToDate)
+    guard let refreshed = model.proofreadingSuggestions.first else {
+      throw PaperTestFailure(message: "Updated suggestion missing")
+    }
+    model.dismissProofreadingSuggestion(refreshed)
+    try expect(
+      model.proofreadingSuggestions.isEmpty
+        && model.currentArticle?.blocks[0].plainText == "作者改了这句话。",
+      "Ignoring a suggestion leaves the original unchanged")
+  }
+
+  @MainActor
+  private static func awaitProofreading(
+    _ message: String, _ model: WorkspaceViewModel, status: ProofreadingStatus
+  ) async throws {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(5))
+    while model.proofreadingStatus != status, clock.now < deadline {
+      try await Task.sleep(for: .milliseconds(5))
+    }
+    try expect(model.proofreadingStatus == status, message)
+  }
+
+  private struct DelayedProofreader: ProofreadingProviding {
+    func suggestions(for paragraphs: [ProofreadingParagraph]) async throws -> ProofreadingResult {
+      // Deliberately return a reply even if the enclosing task is cancelled.
+      try? await Task.sleep(for: .milliseconds(45))
+      return ProofreadingResult(
+        source: .localRules,
+        suggestions: paragraphs.map {
+          ProofreadingSuggestion(
+            blockID: $0.id, original: $0.text, replacement: "这是校对后的句子。", reason: "测试建议")
+        })
+    }
   }
 
   @MainActor
@@ -57,7 +143,14 @@ struct WorkspaceStateTests {
         && !model.canRequestAnnotations,
       "Blank writing must have no open panels, formatting row, or annotation request")
     model.state.articleQuery = "未命名"
-    try expect(model.filteredArticles.contains { $0.id == created }, "The list name is searchable")
+    try expect(
+      !model.filteredArticles.contains { $0.id == created }, "Blank paper stays out of the library")
+    let firstLine = "正在写的文章"
+    TestSupport.replaceText(model, model.currentArticle!.blocks[0].id, firstLine)
+    model.state.articleQuery = firstLine
+    try expect(
+      model.filteredArticles.contains { $0.id == created && $0.displayTitle == firstLine },
+      "Untitled drafts appear as soon as the author writes and can be found by their first line")
     model.renameArticle("新的文章")
     try expect(model.currentArticle?.title == "新的文章", "New articles must accept edits")
     model.deleteArticle(created)

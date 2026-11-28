@@ -5,82 +5,121 @@ import SwiftUI
 struct ArticleSidebar: View {
   @ObservedObject var model: WorkspaceViewModel
   var dismissOnSelection = false
+  @FocusState private var searchFocused: Bool
 
   var body: some View {
-    VStack(spacing: 0) {
-      HStack(spacing: 10) {
-        Text("R").font(.system(size: 20, weight: .semibold, design: .serif))
-          .foregroundStyle(PaperTheme.paper)
-          .frame(width: 30, height: 30)
-          .background(Color.primary, in: RoundedRectangle(cornerRadius: 8))
-        Text("Redraft").font(.system(size: 17, weight: .semibold))
-        Spacer()
-      }.padding(.horizontal, 20).frame(height: 52)
+    let results = model.filteredArticles
+    VStack(alignment: .leading, spacing: 0) {
+      VStack(alignment: .leading, spacing: 12) {
+        Text("所有文章")
+          .font(.system(size: 17, weight: .semibold))
+          .accessibilityAddTraits(.isHeader)
+        searchField
+      }
+      .padding(.horizontal, 16)
+      .padding(.top, 18)
+      .padding(.bottom, 12)
 
-      HStack(spacing: 7) {
-        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-        TextField("搜索文章", text: $model.state.articleQuery).textFieldStyle(.plain)
-          .accessibilityLabel("搜索文章")
-        if !model.state.articleQuery.isEmpty {
-          Button {
-            model.state.articleQuery = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
+      if results.isEmpty {
+        emptyState
+      } else {
+        ScrollView {
+          LazyVStack(spacing: 2) {
+            ForEach(results) { article in articleRow(article) }
           }
-          .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("清除搜索")
+          .padding(.horizontal, 8)
+          .padding(.bottom, 8)
         }
       }
-      .padding(8).background(PaperTheme.fill, in: RoundedRectangle(cornerRadius: 7))
-      .padding(.horizontal, 16).padding(.top, 9).padding(.bottom, 20)
 
-      ScrollView {
-        VStack(alignment: .leading, spacing: 3) {
-          sectionLabel("文章")
-          ForEach(model.filteredArticles) { article in articleRow(article) }
-          if model.filteredArticles.isEmpty {
-            Text("没有找到文章").foregroundStyle(.secondary).font(.callout).padding(12)
-          }
-          sectionLabel("资料库").padding(.top, 25)
-          Button {
-            model.showExamples()
-            dismissDrawer()
-          } label: {
-            HStack(spacing: 10) {
-              Image(systemName: "quote.opening").foregroundStyle(PaperTheme.accent)
-              Text("改写范例")
-              Spacer()
-              Text("\(model.examples.count)").font(.caption).foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 10).padding(.vertical, 11)
-            .background(
-              model.state.section == .examples ? PaperTheme.fill : .clear,
-              in: RoundedRectangle(cornerRadius: 7)
-            )
-            .contentShape(Rectangle())
-          }.buttonStyle(.plain)
-        }.padding(.horizontal, 12)
-      }
-      VStack(alignment: .leading, spacing: 12) {
-        Divider()
-        Button {
-          model.newArticle()
-          dismissDrawer()
-        } label: {
-          Label("新建文章", systemImage: "square.and.pencil").frame(
-            maxWidth: .infinity, alignment: .leading)
-        }.buttonStyle(.plain).font(.system(size: 13, weight: .medium))
-          .help("新建文章 · ⌘N")
-        Text("本地文章库 · 示例批注")
-          .font(.system(size: 10)).foregroundStyle(.secondary)
-      }.padding(.horizontal, 20).padding(.bottom, 18)
+      Divider()
+      examplesLink
+        .padding(8)
     }
-    .frame(maxHeight: .infinity)
-    .background(NativeMaterial(material: .sidebar).ignoresSafeArea())
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .foregroundStyle(PaperTheme.ink)
+    .background(PaperTheme.librarySurface)
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("文章库")
   }
 
-  private func sectionLabel(_ title: String) -> some View {
-    Text(title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-      .padding(.horizontal, 10).padding(.bottom, 7)
+  private var searchField: some View {
+    HStack(spacing: 8) {
+      Image(systemName: "magnifyingglass")
+        .foregroundStyle(PaperTheme.secondaryText)
+        .accessibilityHidden(true)
+      TextField(
+        "搜索文章", text: $model.state.articleQuery,
+        prompt: Text("搜索标题或正文").foregroundStyle(PaperTheme.secondaryText)
+      )
+      .textFieldStyle(.plain)
+      .focused($searchFocused)
+      .accessibilityLabel("搜索文章")
+      if !model.state.articleQuery.isEmpty {
+        Button {
+          model.state.articleQuery = ""
+        } label: {
+          Image(systemName: "xmark.circle.fill").frame(width: 22, height: 26)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(PaperTheme.secondaryText)
+        .help("清除搜索")
+        .accessibilityLabel("清除搜索")
+      }
+    }
+    .font(.system(size: 13))
+    .padding(.horizontal, 9)
+    .frame(height: 32)
+    .background(PaperTheme.fill, in: RoundedRectangle(cornerRadius: 8))
+    .overlay {
+      if searchFocused {
+        RoundedRectangle(cornerRadius: 8).strokeBorder(PaperTheme.accent)
+          .allowsHitTesting(false)
+      }
+    }
+  }
+
+  private var emptyState: some View {
+    let isSearching = !model.state.articleQuery
+      .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    return VStack(alignment: .leading, spacing: 10) {
+      Text(isSearching ? "没有匹配的文章" : "还没有文章")
+        .font(.callout)
+        .foregroundStyle(PaperTheme.secondaryText)
+      if isSearching {
+        Button("清除搜索") {
+          model.state.articleQuery = ""
+          searchFocused = true
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(PaperTheme.accent)
+      } else {
+        Button("新建文章", action: model.newArticle)
+          .buttonStyle(.plain)
+          .foregroundStyle(PaperTheme.accent)
+      }
+    }
+    .font(.callout)
+    .padding(16)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+  }
+
+  private var examplesLink: some View {
+    let selected = model.state.section == .examples
+    return Button {
+      model.showExamples()
+      dismissDrawer()
+    } label: {
+      Label("改写范例", systemImage: "quote.opening")
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(selected ? PaperTheme.accent : PaperTheme.secondaryText)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+        .background(selected ? PaperTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(selected ? .isSelected : [])
   }
 
   private func articleRow(_ article: ArticleViewState) -> some View {
@@ -89,36 +128,55 @@ struct ArticleSidebar: View {
       model.selectArticle(article.id)
       dismissDrawer()
     } label: {
-      HStack(alignment: .top, spacing: 10) {
-        Image(systemName: "doc.text").foregroundStyle(selected ? PaperTheme.accent : .secondary)
-          .font(.system(size: 15)).padding(.top, 2)
-        VStack(alignment: .leading, spacing: 6) {
-          Text(article.displayTitle)
-            .font(.system(size: 13, weight: .medium)).lineLimit(1)
-          Text(article.preview).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-          HStack(spacing: 6) {
-            Text(article.updatedAt, format: .dateTime.month().day())
-            if article.phase != .idle {
-              Text("·")
-              Text(article.phase == .running ? "正在批注" : "\(article.changes.count) 条批注")
-                .foregroundStyle(PaperTheme.accent)
-            }
-          }.font(.system(size: 10)).foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: 4) {
+        Text(article.displayTitle)
+          .font(.system(size: 14, weight: selected ? .semibold : .medium))
+          .foregroundStyle(PaperTheme.ink)
+          .lineLimit(1)
+        if let excerpt = excerpt(for: article) {
+          Text(excerpt)
+            .font(.system(size: 12))
+            .foregroundStyle(PaperTheme.secondaryText)
+            .lineLimit(1)
         }
-        Spacer(minLength: 0)
+        HStack(spacing: 6) {
+          Text(article.updatedAt, format: .dateTime.month().day())
+            .monospacedDigit()
+          if article.phase != .idle {
+            Text("·").accessibilityHidden(true)
+            Text(article.phase == .running ? "正在批注" : "\(article.changes.count) 条批注")
+              .foregroundStyle(PaperTheme.accent)
+          }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(PaperTheme.secondaryText)
       }
-      .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        selected ? Color.primary.opacity(0.085) : .clear, in: RoundedRectangle(cornerRadius: 7)
-      )
+      .padding(.horizontal, 10)
+      .padding(.vertical, 8)
+      .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+      .background(selected ? PaperTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityAddTraits(selected ? .isSelected : [])
     .contextMenu {
-      Button("打开文章") { model.selectArticle(article.id) }
+      Button("打开文章") {
+        model.selectArticle(article.id)
+        dismissDrawer()
+      }
       Button("删除文章…", role: .destructive) { confirmDelete(article) }
     }
+  }
+
+  private func excerpt(for article: ArticleViewState) -> String? {
+    let lines = article.blocks.lazy
+      .flatMap { $0.plainText.split(whereSeparator: \.isNewline) }
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty }
+    if article.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      return lines.dropFirst().first
+    }
+    return lines.first
   }
 
   private func dismissDrawer() {

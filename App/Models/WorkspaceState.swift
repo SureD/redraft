@@ -24,6 +24,7 @@ struct WorkspaceState {
   var selectedArticleID: UUID? = nil
   var section: WorkspaceSection = .articles
   var sidebarVisible: Bool = false
+  var proofreadingVisible: Bool = true
   var inspectorVisible: Bool = false
   var inspectorTab: InspectorTab = .marks
   var articleQuery: String = ""

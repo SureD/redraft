@@ -10,9 +10,15 @@ Core 保留文字、图片、表格及既有 UUID，也保存块编辑器独有�
 
 「复制摘录给 Agent」只输出当前块或块内选区、文章 ID、块 ID、基准版本和批注要求；无网络发送或后台任务。按段提交资料、核对过期建议和接入作者所选工具仍是后续工作，而不是由编辑器依赖代办。
 
+## 随写润色（2026-11-28）
+
+`ProofreadingSession` 从当前文章的已提交文本块生成只读检查请求。停笔后按段落分批检查，只重新检查变过的段落。换稿或改动原句时丢弃对应旧结果。Apple Intelligence 可用时通过 `FoundationModels` 在设备上推理。不可用时由本机规则检查明显的重复或标点，面板显示当前来源。
+
+作者点「应用到正文」时，Swift 校验文章、修订和原文，BlockNote 再检查当前页面与精确原文，把替换做成可独立撤销的事务。事务走现有正文提交和本机保存路径。润色建议只存在于当前窗口，已保存的整轮批注仍由 `ArticleSession` 管理。
+
 ## Agent 接入与任务执行（2026-11-28）
 
-当前版本通过 `ReviewProviding` 注入本地演示，以文章版本为基准发起和校验一轮批注。外部 Agent 接入、写作上下文的持久化和后台调度都处于设计阶段。
+整轮读稿仍通过 `ReviewProviding` 注入本地演示，以文章版本为基准发起和校验一轮批注。外部 Agent 接入、写作上下文的持久化和外部任务调度处于设计阶段。
 
 Redraft 发起写作 Agent 的建立流程，并生成初始化 Prompt。作者在选定的工具中新建专用会话，通过该 Prompt 设定写作助手角色、连接 Redraft 并了解工具用法。模型调用、工具执行和会话管理由所选工具的 harness 负责。Redraft 保存写作助手配置、作者偏好和文章协作状态。
 
@@ -69,7 +75,7 @@ Redraft 发起写作 Agent 的建立流程，并生成初始化 Prompt。作者�
 | 正文、富文本与历史 | 当前是 Core 值快照；早期 LoroDoc 方案尚未替代当前文档所有者 | LoroText 表示正文与富文本标记，Cursor 定位段落边界，forkAt 读取历史版本。Swift 绑定仍标为实验性，相关类型封装在文档模块内。采用完整快照以保留早期草稿。[Swift 绑定](https://github.com/loro-dev/loro-swift) · [快照格式](https://loro.dev/docs/tutorial/encoding) |
 | 文本对比 | 现有 `TextDiffing` 接口，具体实现待开发 | 设计方案使用 NaturalLanguage 分词和 Swift 标准库比较段落中的句词与标点。[Apple 分词接口](https://developer.apple.com/documentation/naturallanguage/nltokenizer) |
 | 本地保存与导出 | 系统 SQLite、含结构和身份的快照、UTF-8 Markdown 及附件 | 草稿归本机文章库，导出的 Markdown 不承诺保留格式、块身份或审阅历史。 |
-| AI 批注与 Agent 接入 | 现有 `ReviewProviding` 和本地演示。计划在用户选定的工具中初始化专用写作会话，通过 CLI 或 MCP 与 Redraft 协作 | 所选工具提供 harness，Redraft 提供写作上下文并接收批注和资料。 |
+| AI 润色与 Agent 接入 | `FoundationModels` 设备端润色、`ReviewProviding` 整轮演示。计划在用户选定的工具中初始化专用写作会话，通过 CLI 或 MCP 与 Redraft 协作 | 润色在设备上检查基础行文。外部 Agent 用于深入读稿与查证。 |
 | 工程组织 | XcodeGen 生成 macOS 工程，SwiftPM 管理本地核心包，npm 锁定 BlockNote 和前端依赖 | `make build` 先生成离线资源，再把它们复制进 App。核心逻辑可以独立测试，编辑器交互在 WebKit 和浏览器中验证。[XcodeGen](https://github.com/yonaskolb/XcodeGen) |
 
 ## 模块与依赖
@@ -82,7 +88,7 @@ macOS 应用负责界面和外部服务，依赖本地 Swift 包 RedraftCore。�
 | RedraftCore | 文章会话 | 校验编辑与批注的基准版本，成稿时归档本轮的原文、批注及作者决定。 | 文档与版本、`ReviewProviding` |
 | RedraftCore | 文档与版本 | 保存块及表格的身份、语义富文本和版本快照，转换编辑页的块树。 | Foundation |
 | RedraftCore | 文本对比（Diff） | 定义两稿间的有序差异片段，具体比较器待实现。 | Swift 标准库 |
-| macOS 应用 | AI 批注接入 | 应用提供本地示例批注。作者可以把当前摘录复制到自己的会话。专用会话初始化、资料和批注回写属于后续功能。 | `ReviewProviding`、系统剪贴板 |
+| macOS 应用 | AI 润色与批注接入 | 本机模型或基础规则检查正文。`ReviewProviding` 支持整轮演示。作者可以把当前摘录复制到自己的会话。 | `FoundationModels`、`ReviewProviding`、系统剪贴板 |
 | macOS 应用 | 本地文章库 | `WorkspaceStore` 汇集会话变更，SQLite 按文章事务保存正文、版本与取舍。Markdown 可随附件单独导出。 | 系统 SQLite、Foundation、Core 文档和历史类型 |
 
 ## 现有验证与适用边界

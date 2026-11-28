@@ -40,7 +40,9 @@ private final class LibraryLifecycle: NSObject, NSApplicationDelegate {
   override init() {
     launch = Result {
       let store = try WorkspaceStore(libraryAt: SQLiteLibrary.location())
-      let model = WorkspaceViewModel(store: store, reviewProvider: DemoReviewProvider())
+      let model = WorkspaceViewModel(
+        store: store, reviewProvider: DemoReviewProvider(),
+        proofreadingProvider: LocalProofreadingProvider())
       model.newArticle()  // A new launch sheet is not a stored draft until the author changes it.
       return (store, model)
     }

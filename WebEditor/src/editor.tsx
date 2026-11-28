@@ -1,3 +1,5 @@
+import { getBlockInfoFromNode, getNodeById } from "@blocknote/core";
+import { closeHistory } from "prosemirror-history";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { Selection as PMSelection } from "prosemirror-state";
@@ -7,8 +9,13 @@ import { WritingView } from "./view";
 
 type Open = { token: string; blocks: Blocks; editable: boolean; focus: boolean };
 type Configuration = { editable?: boolean; highlight?: string | null };
+type ProofreadingEdit = {
+  token: string; version: number; requestID: string; blockID: string;
+  paragraph: string; original: string; replacement: string;
+};
 type Selection = { id: string; location?: number; length?: number };
-type Message = { kind: "ready" } | { kind: "change"; token: string; blocks: Blocks }
+type Message = { kind: "ready" }
+  | { kind: "change"; token: string; blocks: Blocks; version: number; proofreadingID?: string }
   | ({ kind: "selection"; token: string } & Selection)
   | { kind: "composition"; token: string; active: boolean } | { kind: "error"; token: string; message: string };
 
@@ -18,7 +25,10 @@ declare global {
       redraft: { postMessage(message: Message): void };
       redraftImage: { postMessage(image: { token: string; dataURL: string }): Promise<string> };
     } };
-    redraft: { open(data: Open): void; configure(data: Configuration): void; focus(): void; markdown(paths?: Record<string, string>): string };
+    redraft: {
+      open(data: Open): void; configure(data: Configuration): void; focus(): void;
+      applyProofreading(edit: ProofreadingEdit): boolean; markdown(paths?: Record<string, string>): string;
+    };
   }
 }
 const host = document.getElementById("writing")!;
@@ -37,6 +47,8 @@ class WritingSession {
   readonly token: string;
   editable: boolean;
   private published: Editor["prosemirrorState"]["doc"];
+  private version = 0;
+  private proofreadingID?: string;
   private readonly events = new AbortController();
   private composing = false;
   private finishTimer?: number;
@@ -122,7 +134,8 @@ class WritingSession {
     // WK's structured message body does not accept undefined (e.g. an unset
     // image width); absent properties are omitted and missing array cells become null.
     const blocks: Blocks = JSON.parse(JSON.stringify(this.editor.document));
-    post({ kind: "change", token: this.token, blocks });
+    post({ kind: "change", token: this.token, blocks, version: ++this.version,
+      ...(this.proofreadingID ? { proofreadingID: this.proofreadingID } : {}) });
     this.published = doc;
   }
 
@@ -187,6 +200,52 @@ class WritingSession {
     if (selector) host.querySelector(selector)?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
+  applyProofreading(edit: ProofreadingEdit): boolean {
+    if (edit.token !== this.token || edit.version !== this.version || !this.editable || this.composing ||
+      !edit.original || edit.original === edit.replacement) return false;
+    const state = this.editor.prosemirrorState;
+    if (!this.published.eq(state.doc)) return false;
+    const block = getNodeById(edit.blockID, state.doc);
+    if (!block) return false;
+    const info = getBlockInfoFromNode(block.node, block.posBeforeNode);
+    if (!info.hasContent || !info.content.node.isTextblock) return false;
+    const node = info.content.node;
+    let paragraph = "";
+    let mapped = true;
+    node.forEach(child => {
+      if (child.isText) paragraph += child.text!;
+      else if (child.type.name === "hardBreak") paragraph += "\n";
+      else mapped = false;
+    });
+    if (!mapped || paragraph !== edit.paragraph) return false;
+    const start = paragraph.indexOf(edit.original);
+    if (start < 0 || paragraph.indexOf(edit.original, start + 1) >= 0) return false;
+    const end = start + edit.original.length;
+    let marks: typeof node.marks | undefined;
+    let textOnly = true;
+    node.nodesBetween(start, end, child => {
+      if (child.isText) marks = marks?.filter(mark => mark.isInSet(child.marks)) ?? child.marks;
+      else textOnly = false;
+      return false;
+    });
+    if (!textOnly) return false;
+
+    const from = info.contentStart + start;
+    const to = info.contentStart + end;
+    this.proofreadingID = edit.requestID;
+    try {
+      this.editor.transact(tr => {
+        closeHistory(tr);
+        if (edit.replacement) tr.replaceWith(from, to, state.schema.text(edit.replacement, marks));
+        else tr.delete(from, to);
+      });
+      this.editor.transact(tr => { closeHistory(tr); });
+      return true;
+    } finally {
+      this.proofreadingID = undefined;
+    }
+  }
+
   private continueAfter(id: string) {
     const next = this.editor.getNextBlock(id);
     const typing = next?.type === "paragraph" && !next.content.length ? next
@@ -245,6 +304,7 @@ window.redraft = {
   },
   configure(data) { current?.configure(data); },
   focus() { if (current?.editable) current.editor.focus(); },
+  applyProofreading(edit) { return current?.applyProofreading(edit) ?? false; },
   markdown(paths) {
     if (!current) return "";
     const { editor } = current;

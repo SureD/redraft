@@ -54,11 +54,15 @@ struct BlockNoteEditor: NSViewRepresentable {
     private var recoveredProcess = false
     private var needsReload = false
     private var token = UUID().uuidString
+    // A page can have queued changes that native has not accepted yet.
+    private var pageVersion = 0
     private var base: Article?
     private var editable: Bool?
     private var highlighted: UUID?
     private var lastFocusRequest = 0
     private var exportSubscription: AnyCancellable?
+    private var proofreadingSubscription: AnyCancellable?
+    private var proofreading: (id: String, edit: ProofreadingEdit)?
 
     init(model: WorkspaceViewModel, resolver: any DocumentImageResolving) {
       self.model = model
@@ -67,6 +71,53 @@ struct BlockNoteEditor: NSViewRepresentable {
       exportSubscription = model.exportMarkdown.sink { [weak self] in
         Task { @MainActor in await self?.export() }
       }
+      proofreadingSubscription = model.proofreadingEditRequested.sink { [weak self] edit in
+        self?.applyProofreading(edit)
+      }
+    }
+
+    private func applyProofreading(_ edit: ProofreadingEdit) {
+      if proofreading?.edit == edit { return }
+      guard proofreading == nil, ready, let web, isEntry(web.url), !model.isEditorLocked,
+        !model.composingInEditor, let article = model.currentArticle?.document,
+        article.id == edit.articleID, article.revisionID == edit.revisionID,
+        base?.id == article.id, base?.blocks == article.blocks,
+        let block = article.blocks.first(where: { $0.id == edit.blockID }), block.kind == .text,
+        block.plainText.utf8.elementsEqual(edit.paragraph.utf8)
+      else {
+        model.proofreadingEditFinished(edit, applied: false)
+        return
+      }
+      let id = UUID().uuidString
+      proofreading = (id, edit)
+      let payload: [String: Any] = [
+        "requestID": id, "token": token, "version": pageVersion,
+        "blockID": edit.blockID.uuidString.lowercased(), "paragraph": edit.paragraph,
+        "original": edit.original, "replacement": edit.replacement,
+      ]
+      web.callAsyncJavaScript(
+        "return window.redraft.applyProofreading(payload)", arguments: ["payload": payload],
+        in: nil, in: .page
+      ) { [weak self] result in
+        if case .success(let value) = result, value as? Bool == true { return }
+        self?.finishProofreading(id, applied: false)
+      }
+    }
+
+    private func finishProofreading(_ id: String, applied: Bool) {
+      guard let proofreading, proofreading.id == id else { return }
+      self.proofreading = nil
+      if applied, let web {
+        web.window?.makeFirstResponder(web)
+        call("window.redraft.focus()")
+      }
+      Task { @MainActor [model] in
+        model.proofreadingEditFinished(proofreading.edit, applied: applied)
+      }
+    }
+
+    private func cancelProofreading() {
+      if let proofreading { finishProofreading(proofreading.id, applied: false) }
     }
 
     private func export() async {
@@ -112,6 +163,8 @@ struct BlockNoteEditor: NSViewRepresentable {
     func detach() {
       web = nil
       ready = false
+      proofreadingSubscription?.cancel()
+      cancelProofreading()
       model.composingInEditor = false
     }
 
@@ -138,7 +191,9 @@ struct BlockNoteEditor: NSViewRepresentable {
         do {
           let blocks = try JSONSerialization.jsonObject(
             with: BlockNoteDocument.encode(article.blocks))
+          cancelProofreading()
           token = UUID().uuidString
+          pageVersion = 0
           base = article
           needsReload = false
           images.reset(to: article.blocks)
@@ -221,13 +276,28 @@ struct BlockNoteEditor: NSViewRepresentable {
           }
         }
       case "change":
+        let proofreadingID = body["proofreadingID"] as? String
+        var applied = false
+        defer {
+          if let proofreadingID { finishProofreading(proofreadingID, applied: applied) }
+        }
         guard !model.isEditorLocked, let current = model.currentArticle?.document,
-          base.revisionID == current.revisionID || base.blocks == current.blocks
+          base.revisionID == current.revisionID || base.blocks == current.blocks,
+          let version = body["version"] as? Int, version == pageVersion + 1
         else {
           model.showNotice("稿件已更新，未用旧的输入覆盖原文。")
           needsReload = true
           synchronize()
           return
+        }
+        if let proofreadingID {
+          guard let proofreading, proofreading.id == proofreadingID,
+            proofreading.edit.revisionID == current.revisionID, !model.composingInEditor
+          else {
+            needsReload = true
+            synchronize()
+            return
+          }
         }
         do {
           guard let blocks = body["blocks"] as? [[String: Any]] else {
@@ -238,8 +308,10 @@ struct BlockNoteEditor: NSViewRepresentable {
             imageData: images.data(for:))
           guard model.commitEditorBlocks(next, articleID: current.id, basedOn: current.revisionID)
           else { throw EditingError.invalidDocument }
+          pageVersion = version
           self.base = model.currentArticle?.document
           images.remember(next)
+          applied = true
         } catch {
           model.showNotice("这次编辑无法保存，已恢复最近一次有效的正文：\(error.localizedDescription)")
           needsReload = true
@@ -290,6 +362,7 @@ struct BlockNoteEditor: NSViewRepresentable {
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
       ready = false
       base = nil
+      cancelProofreading()
       model.composingInEditor = false
       model.showNotice("写作进程中断，已提交的正文仍在文章库。")
       if !recoveredProcess {

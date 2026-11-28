@@ -21,7 +21,8 @@ struct WorkspaceSheetView: View {
       sheetContent
     }
     .padding(28).frame(width: sheet == .shortcuts ? 500 : 440)
-    .background(NativeMaterial(material: .sheet))
+    .foregroundStyle(PaperTheme.ink)
+    .background(PaperTheme.reviewSurface)
   }
 
   private var title: String {
@@ -49,15 +50,24 @@ struct WorkspaceSheetView: View {
       }
     case .rewrite:
       if let change = model.currentChange {
-        Text(change.before).foregroundStyle(.secondary).lineLimit(5)
+        VStack(alignment: .leading, spacing: 6) {
+          Text("原文").font(.caption.weight(.medium)).foregroundStyle(PaperTheme.secondaryText)
+          Text(change.before).font(.callout).lineLimit(5)
+        }
       }
-      TextEditor(text: $model.state.rewriteText).font(.body).frame(height: 130)
-        .padding(8).background(PaperTheme.paper, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(PaperTheme.separator))
-        .accessibilityLabel("重写内容")
+      VStack(alignment: .leading, spacing: 6) {
+        Text("你的改写").font(.caption.weight(.medium)).foregroundStyle(PaperTheme.secondaryText)
+        TextEditor(text: $model.state.rewriteText)
+          .font(.body)
+          .scrollContentBackground(.hidden)
+          .frame(height: 130)
+          .padding(8).background(PaperTheme.paper, in: RoundedRectangle(cornerRadius: 8))
+          .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(PaperTheme.separator))
+          .accessibilityLabel("重写内容")
+      }
       TextField("取舍说明（可选）", text: $model.state.rewriteReason).textFieldStyle(.roundedBorder)
       actions(
-        "使用这段表达",
+        "选用这段改写",
         disabled: model.state.rewriteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       ) {
         model.submitRewrite()
@@ -86,14 +96,14 @@ struct WorkspaceSheetView: View {
         }
       }
       Divider()
-      Text("文章保存在本机。批注来自本地演示，只有你确认的改动才会写入正文。")
+      Text("文章保存在本机。Redraft 助手会随写作检查行文，你可以逐条把建议应用到正文。")
         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       dismissButton
     case .shortcuts:
       VStack(spacing: 12) {
         shortcut("新建文章", "⌘ N")
         shortcut("切换文章库", "⌃ ⌘ S")
-        shortcut("请求或阅读批注", "⌘ ↩")
+        shortcut("显示 Redraft 助手或阅读待处理批注", "⌘ ↩")
         Divider()
         shortcut("粗体 / 斜体 / 下划线", "⌘ B / I / U")
         shortcut("插入图片、表格等内容", "/")

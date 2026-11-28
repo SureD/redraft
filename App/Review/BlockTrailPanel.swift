@@ -9,21 +9,21 @@ struct BlockTrailPanel: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 20) {
+      VStack(alignment: .leading, spacing: 16) {
         if let roundIndex = article.rounds.firstIndex(where: { $0.id == selectedRoundID }) {
           roundOverview(article.rounds[roundIndex], ordinal: roundIndex + 1)
         } else if let block {
           blockTrail(block)
         } else {
           Text("在正文中选一段，回看它的改写轨迹。")
-            .font(.callout).foregroundStyle(.secondary)
+            .font(.callout).foregroundStyle(PaperTheme.secondaryText)
           ForEach(Array(article.rounds.enumerated().reversed()), id: \.element.id) { index, round in
             Button("第 \(index + 1) 轮批注 · \(round.changes.count) 条") { selectedRoundID = round.id }
               .buttonStyle(.link)
           }
         }
       }
-      .frame(maxWidth: .infinity, alignment: .leading).padding(18)
+      .frame(maxWidth: .infinity, alignment: .leading).padding(16)
     }
     .id(selectedRoundID ?? block?.id)
     .onChange(of: block?.id) { selectedRoundID = nil }
@@ -61,7 +61,7 @@ struct BlockTrailPanel: View {
       }
     }
     if rounds.isEmpty && snapshots.isEmpty {
-      Text("这段还没有改稿记录。").font(.callout).foregroundStyle(.secondary)
+      Text("这段还没有改稿记录。").font(.callout).foregroundStyle(PaperTheme.secondaryText)
     }
   }
 
@@ -73,6 +73,7 @@ struct BlockTrailPanel: View {
     }
     .buttonStyle(.link).font(.callout)
     Text("第 \(ordinal) 轮 · \(round.changes.count) 条批注").font(.headline)
+      .accessibilityAddTraits(.isHeader)
     let blocks = round.source.blocks.filter { source in
       round.changes.contains { $0.blockID == source.id }
     }
@@ -124,13 +125,13 @@ private struct TrailEntry<Content: View>: View {
 
   var body: some View {
     DisclosureGroup(isExpanded: $expanded) {
-      VStack(alignment: .leading, spacing: 14) { content }
+      VStack(alignment: .leading, spacing: 12) { content }
         .padding(.top, 12).frame(maxWidth: .infinity, alignment: .leading)
     } label: {
       HStack {
         Text(title).font(.subheadline.weight(.semibold)).lineLimit(2)
         Spacer(minLength: 4)
-        if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary) }
+        if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(PaperTheme.secondaryText) }
       }
     }
   }

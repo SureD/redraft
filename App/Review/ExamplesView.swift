@@ -6,35 +6,37 @@ struct ExamplesView: View {
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 24) {
-        VStack(alignment: .leading, spacing: 18) {
-          Text("改写范例").font(.system(size: 29, weight: .semibold))
-          Picker("按取舍筛选", selection: $model.state.exampleFilter) {
-            ForEach(ExampleFilter.allCases, id: \.self) { filter in
-              Text(filter.title).tag(filter)
-            }
-          }
-          .pickerStyle(.segmented)
-          .labelsHidden()
-          .frame(maxWidth: 420)
+      LazyVStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 16) {
+          Text("改写范例").font(.system(size: 32, weight: .semibold))
+            .accessibilityAddTraits(.isHeader)
           HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("搜索句子或说明", text: $model.state.exampleQuery)
-              .textFieldStyle(.plain)
-              .accessibilityLabel("搜索改写范例")
-            if !model.state.exampleQuery.isEmpty {
-              Button {
-                model.state.exampleQuery = ""
-              } label: {
-                Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+              Image(systemName: "magnifyingglass").foregroundStyle(PaperTheme.secondaryText)
+                .accessibilityHidden(true)
+              TextField("搜索句子或说明", text: $model.state.exampleQuery)
+                .textFieldStyle(.plain)
+                .accessibilityLabel("搜索改写范例")
+              if !model.state.exampleQuery.isEmpty {
+                Button {
+                  model.state.exampleQuery = ""
+                } label: {
+                  Image(systemName: "xmark.circle.fill").foregroundStyle(PaperTheme.secondaryText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("清除搜索")
               }
-              .buttonStyle(.plain)
-              .accessibilityLabel("清除搜索")
             }
+            .padding(.horizontal, 12).frame(height: 32)
+            .background(PaperTheme.fill, in: RoundedRectangle(cornerRadius: 8))
+            .frame(maxWidth: 320)
+            Picker("按取舍筛选", selection: $model.state.exampleFilter) {
+              ForEach(ExampleFilter.allCases, id: \.self) { filter in
+                Text(filter.title).tag(filter)
+              }
+            }
+            .labelsHidden().fixedSize()
           }
-          .padding(9)
-          .background(PaperTheme.fill, in: RoundedRectangle(cornerRadius: 7))
-          .frame(maxWidth: 340)
         }
 
         if model.filteredExamples.isEmpty {
@@ -51,61 +53,54 @@ struct ExamplesView: View {
           .frame(minHeight: 240)
         } else {
           ForEach(model.filteredExamples) { example in
-            exampleCard(example)
+            exampleRow(example)
           }
         }
       }
-      .padding(.horizontal, 34)
-      .padding(.vertical, 36)
-      .frame(maxWidth: 820)
+      .frame(maxWidth: 640)
+      .padding(.horizontal, 32)
+      .padding(.vertical, 32)
       .frame(maxWidth: .infinity)
     }
+    .foregroundStyle(PaperTheme.ink)
     .background(PaperTheme.paper)
   }
 
-  private func exampleCard(_ example: RewriteExample) -> some View {
+  private func exampleRow(_ example: RewriteExample) -> some View {
     VStack(alignment: .leading, spacing: 16) {
-      HStack(spacing: 9) {
-        ReviewTag(title: example.displayTag)
-        Text(example.decision.title).font(.caption).foregroundStyle(.secondary)
-        Spacer()
-        Text(articleTitle(example.articleID)).font(.caption).foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
-      HStack(alignment: .top, spacing: 14) {
-        Text("原来").font(.caption).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
-        Text(example.before)
-          .strikethrough(example.decision != .keep)
-          .foregroundStyle(example.decision == .keep ? Color.primary : PaperTheme.deletion)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      if example.decision != .keep {
-        HStack(alignment: .top, spacing: 14) {
-          Text("现在")
-            .font(.caption).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
-          Text(example.after)
-            .underline()
-            .foregroundStyle(PaperTheme.insertion)
-            .frame(maxWidth: .infinity, alignment: .leading)
+      HStack(spacing: 8) {
+        Text(example.displayTag).font(.subheadline.weight(.semibold))
+        Text(example.decision.title).font(.caption).foregroundStyle(PaperTheme.secondaryText)
+        Spacer(minLength: 8)
+        Button {
+          model.selectExample(example.id)
+        } label: {
+          Label(articleTitle(example.articleID), systemImage: "arrow.up.right")
+            .lineLimit(1)
         }
+        .buttonStyle(.plain).font(.callout)
+        .foregroundStyle(PaperTheme.accent)
+        .help("回到文章").accessibilityLabel("回到文章，\(articleTitle(example.articleID))")
+      }
+      examplePassage("原文", text: example.before)
+      if example.decision != .keep {
+        examplePassage("成稿", text: example.after)
       }
       if !example.reason.isEmpty {
-        Text(example.reason).font(.callout).foregroundStyle(.secondary)
+        examplePassage("取舍", text: example.reason)
       }
-      Button {
-        model.selectExample(example.id)
-      } label: {
-        Label("回到文章", systemImage: "arrow.up.right")
-      }
-      .buttonStyle(.plain)
-      .font(.callout)
-      .foregroundStyle(PaperTheme.accent)
     }
-    .font(.system(size: 15))
-    .lineSpacing(7)
-    .textSelection(.enabled)
-    .padding(.vertical, 24)
-    .overlay(alignment: .top) { Divider() }
+    .padding(.top, 24)
+    .overlay(alignment: .top) { Rectangle().fill(PaperTheme.separator).frame(height: 1) }
+  }
+
+  private func examplePassage(_ title: String, text: String) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: 12) {
+      Text(title).font(.caption.weight(.medium)).foregroundStyle(PaperTheme.secondaryText)
+        .frame(width: 32, alignment: .leading)
+      Text(text).font(.system(size: 15)).lineSpacing(6).textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
   }
 
   private func articleTitle(_ id: UUID) -> String {

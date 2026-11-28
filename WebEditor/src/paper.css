@@ -1,43 +1,91 @@
 :root {
   color-scheme: light dark;
-  --paper: #fbfaf6;
-  --ink: #1d1c1a;
-  --mark: #1667d9;
-  --gutter: 52px; /* matches the native title's inset when the window narrows */
+  /* Match the native PaperTheme and WritingView. */
+  --paper: #fcfbf8;
+  --ink: #262421;
+  --ink-secondary: #65615b;
+  --mark: #855333;
+  --menu-surface: #f7f5f0;
+  --column-width: 640px;
+  --column-inset: 48px;
+  --editor-width: calc(var(--column-width) + var(--column-inset) * 2);
   --ui-font: -apple-system, BlinkMacSystemFont, "PingFang SC", system-ui, sans-serif;
+  --code-font: ui-monospace, "SF Mono", Menlo, monospace;
+  --heading-1: 1.53em;
+  --heading-2: 1.29em;
+  --heading-3: 1.12em;
+  --hover-fill: color-mix(in srgb, var(--ink) 6%, var(--menu-surface));
+  --selection-fill: color-mix(in srgb, var(--mark) 20%, var(--paper));
+  --review-fill: color-mix(in srgb, var(--mark) 9%, var(--paper));
+  --line: color-mix(in srgb, var(--ink) 16%, transparent);
 }
 @media (prefers-color-scheme: dark) {
-  :root { --paper: #1e1e1d; --ink: #edebe7; --mark: #2f86f6; }
+  :root {
+    --paper: #1c1d1f;
+    --ink: #f1eee9;
+    --ink-secondary: #aea9a2;
+    --mark: #e2ac81;
+    --menu-surface: #222326;
+  }
 }
 html, body { margin: 0; min-height: 100%; background: var(--paper); color: var(--ink); }
 body { font-family: var(--ui-font); }
-.redraft-paper.bn-root {
+.redraft-paper.bn-root[data-color-scheme] {
   --bn-colors-editor-background: var(--paper);
   --bn-colors-editor-text: var(--ink);
+  --bn-colors-menu-background: var(--menu-surface);
+  --bn-colors-menu-text: var(--ink);
+  --bn-colors-tooltip-background: var(--menu-surface);
+  --bn-colors-tooltip-text: var(--ink);
+  --bn-colors-hovered-background: var(--hover-fill);
+  --bn-colors-hovered-text: var(--ink);
+  --bn-colors-selected-background: var(--selection-fill);
+  --bn-colors-selected-text: var(--ink);
+  --bn-colors-border: var(--line);
+  --bn-colors-side-menu: var(--ink-secondary);
   --bn-font-family: var(--ui-font);
+  --bn-border-radius: 8px;
 }
 .redraft-paper .bn-editor {
-  box-sizing: content-box;
-  max-width: 692px;
-  min-height: calc(100vh - 100px);
-  margin: 0 auto;
-  padding: 6px var(--gutter) 88px;
+  box-sizing: border-box;
+  max-width: var(--editor-width);
+  min-height: 100vh;
+  /* Use the same width as the native title, including the classic scrollbar. */
+  margin-inline-start: max(0px, calc((100vw - var(--editor-width)) / 2));
+  padding: 0 var(--column-inset) 88px;
+  border-radius: 0;
   font-family: var(--ui-font);
   font-size: 17px;
   caret-color: var(--mark);
   overflow-wrap: anywhere;
 }
-.redraft-paper .bn-block-outer { line-height: 1.74; }
+.redraft-paper .bn-editor ::selection,
+.redraft-paper .bn-editor [data-show-selection] { background: var(--selection-fill); color: var(--ink); }
+.redraft-paper .bn-editor a { color: var(--mark); text-underline-offset: 0.15em; }
+.redraft-paper .bn-inline-content code { font-family: var(--code-font); }
+.redraft-paper .bn-block-outer { line-height: 1.65; }
 .redraft-paper .bn-block-content { padding-block: 4px; }
-.redraft-paper .bn-block-content[data-content-type="heading"] { line-height: 1.35; }
+.redraft-paper .bn-block-content[data-content-type="heading"] { line-height: 1.35; padding-block-start: 16px; }
+.redraft-paper [data-content-type="heading"]:not([data-level]),
+.redraft-paper [data-content-type="heading"][data-level="1"] { --level: var(--heading-1); }
+.redraft-paper [data-content-type="heading"][data-level="2"] { --level: var(--heading-2); }
+.redraft-paper [data-content-type="heading"][data-level="3"] { --level: var(--heading-3); }
+.redraft-paper [data-prev-level="1"] { --prev-level: var(--heading-1); }
+.redraft-paper [data-prev-level="2"] { --prev-level: var(--heading-2); }
+.redraft-paper [data-prev-level="3"] { --prev-level: var(--heading-3); }
 .redraft-paper .bn-visual-media { max-width: 100%; height: auto; }
-.redraft-paper .bn-trailing-block:hover::before {
+.redraft-paper .bn-editor [data-content-type="table"] :is(th, td) { border-color: var(--line); }
+.redraft-paper .bn-editor[contenteditable="true"] .bn-trailing-block:hover::before {
   content: "点击继续写作";
   font-size: 13px;
   line-height: 30px;
-  color: color-mix(in srgb, var(--ink) 58%, transparent);
+  color: var(--ink-secondary);
 }
-.redraft-paper { --review-fill: color-mix(in srgb, var(--mark) 9%, transparent); }
+.redraft-paper .bn-side-menu .mantine-UnstyledButton-root:not(.mantine-Menu-item) svg {
+  width: 18px;
+  height: 18px;
+}
+.redraft-paper .bn-panel { max-width: calc(100vw - 24px); }
 @media (prefers-reduced-motion: reduce) {
   .redraft-paper *, .redraft-paper *::before, .redraft-paper *::after { transition-duration: 0s !important; animation-duration: 0s !important; }
 }

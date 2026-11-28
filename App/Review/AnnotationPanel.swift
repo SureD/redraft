@@ -11,44 +11,48 @@ struct AnnotationPanel: View {
       let index = article.changes.firstIndex(where: { $0.id == change.id })
     {
       VStack(spacing: 0) {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
           Text("第 \(index + 1) 条，共 \(article.changes.count) 条")
-            .font(.callout).foregroundStyle(.secondary)
+            .font(.system(size: 13, weight: .medium)).monospacedDigit()
+            .foregroundStyle(PaperTheme.secondaryText)
           Spacer()
           navigationButton(from: index, offset: -1)
           navigationButton(from: index, offset: 1)
         }
-        .padding(.horizontal, 18).padding(.top, 16)
+        .padding(.horizontal, 16).padding(.top, 8)
         ScrollView {
-          VStack(alignment: .leading, spacing: 20) {
+          VStack(alignment: .leading, spacing: 16) {
             if let instruction = article.marks[change.blockID] {
               Label(instruction, systemImage: "bookmark")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(PaperTheme.secondaryText)
                 .accessibilityLabel("你的要求，\(instruction)")
             }
-            if !change.explanation.isEmpty {
-              Text(change.explanation)
-                .font(.system(size: 15, weight: .medium)).lineSpacing(5)
-                .textSelection(.enabled)
+            LabeledPassage(title: "原文") {
+              passage(text: change.before, block: change.beforeBlock, kind: change.kind)
             }
             LabeledPassage(title: change.kind == .text ? "建议写法" : "建议") {
               passage(text: change.after, block: change.afterBlock, kind: change.kind)
             }
-            DisclosureGroup("对照原稿") {
-              passage(text: change.before, block: change.beforeBlock, kind: change.kind)
-                .font(.callout).padding(.top, 5).frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(PaperTheme.selection, in: RoundedRectangle(cornerRadius: 8))
+            if !change.explanation.isEmpty {
+              Text(change.explanation)
+                .font(.callout).lineSpacing(4)
+                .foregroundStyle(PaperTheme.secondaryText)
+                .textSelection(.enabled)
             }
-            .font(.caption).foregroundStyle(.secondary)
             if change.decision == .rewrite {
               LabeledPassage(title: "你的改写") {
                 Text(change.rewrittenText).textSelection(.enabled)
               }
             }
-            Divider()
-            ReviewDecisionButtons(model: model, change: change)
-            if let decision = change.decision {
-              Text("已选「\(decision.title)」，成稿时生效。")
-                .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+              Text("你的取舍").font(.caption.weight(.medium))
+                .foregroundStyle(PaperTheme.secondaryText)
+                .accessibilityAddTraits(.isHeader)
+              ReviewDecisionButtons(model: model, change: change)
+            }
+            if change.decision != nil {
               DisclosureGroup("取舍说明") {
                 TextField(
                   "给自己留一句话",
@@ -57,20 +61,20 @@ struct AnnotationPanel: View {
                     set: { model.updateChangeReason($0, changeID: change.id) }
                   ), axis: .vertical
                 )
-                .textFieldStyle(.roundedBorder).lineLimit(1...4).padding(.top, 5)
+                .textFieldStyle(.roundedBorder).lineLimit(1...4).padding(.top, 8)
               }
               .font(.caption)
             }
           }
-          .padding(18).frame(maxWidth: .infinity, alignment: .leading)
+          .padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
         .id(change.id)
-        Divider()
+        Rectangle().fill(PaperTheme.separator).frame(height: 1)
         finishControls
       }
     } else if article.phase == .ready {
       Button("阅读本轮批注", action: model.enterReview)
-        .padding(18)
+        .padding(16)
     } else {
       ReviewEmptyState(symbol: "text.bubble", title: "暂无批注", detail: "")
     }
@@ -85,7 +89,9 @@ struct AnnotationPanel: View {
       }
     } label: {
       Image(systemName: offset < 0 ? "chevron.left" : "chevron.right")
-        .frame(width: 24, height: 22)
+        .font(.system(size: 12, weight: .semibold))
+        .frame(width: 32, height: 32)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain).disabled(!article.changes.indices.contains(target))
     .help(title).accessibilityLabel(title)
@@ -105,28 +111,33 @@ struct AnnotationPanel: View {
     let selected = article.changes.filter { $0.decision == .accept || $0.decision == .rewrite }
       .count
     let unresolved = model.unresolvedCount
-    let allUndecided = unresolved == article.changes.count
-    let selectedTitle = selected > 0 ? "采用所选 \(selected) 处并成稿" : "按原稿成稿"
-    let bulkTitle = allUndecided ? "全部采用并成稿" : "同时采用其余 \(unresolved) 处并成稿"
-    return HStack(spacing: 8) {
-      Button {
-        model.completeReview(acceptRemaining: allUndecided)
-      } label: {
-        Text(allUndecided ? bulkTitle : selectedTitle).frame(maxWidth: .infinity)
+    let selectedTitle = selected > 0 ? "应用 \(selected) 处改动并成稿" : "按原稿成稿"
+    let bulkTitle =
+      unresolved == article.changes.count ? "全部采用并成稿" : "同时采用其余 \(unresolved) 处并成稿"
+    return VStack(alignment: .leading, spacing: 8) {
+      if unresolved > 0 {
+        Text("未选择的 \(unresolved) 条批注会保留原文。")
+          .font(.caption).foregroundStyle(PaperTheme.secondaryText)
       }
-      .buttonStyle(.borderedProminent)
-      Menu {
-        if allUndecided {
-          Button(selectedTitle) { model.completeReview() }
-        } else if unresolved > 0 {
-          Button(bulkTitle) { model.completeReview(acceptRemaining: true) }
+      HStack(spacing: 8) {
+        Button {
+          model.completeReview()
+        } label: {
+          Text(selectedTitle).foregroundStyle(PaperTheme.paper).frame(maxWidth: .infinity)
         }
-        Button("放弃本轮批注，继续写作", action: model.cancelReview)
-      } label: {
-        Image(systemName: "ellipsis.circle").font(.system(size: 16))
+        .buttonStyle(.borderedProminent)
+        Menu {
+          if unresolved > 0 {
+            Button(bulkTitle) { model.completeReview(acceptRemaining: true) }
+            Divider()
+          }
+          Button("放弃本轮批注，继续写作", action: model.cancelReview)
+        } label: {
+          Image(systemName: "ellipsis.circle").font(.system(size: 16))
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 32)
+        .help("其他成稿选项").accessibilityLabel("其他成稿选项")
       }
-      .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 30)
-      .help("其他成稿选项").accessibilityLabel("其他成稿选项")
     }
     .padding(16)
   }
