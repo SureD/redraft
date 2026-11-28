@@ -52,7 +52,7 @@ Redraft 是一款原生 macOS 伴随式写作编辑器。先写正文，再请 A
 | `make snapshots` | 渲染真实原生视图，检查 TextKit 2 / 材质并输出深浅色和窄窗截图到 `.build/ui-snapshots` |
 | `make lint` | 按随 Xcode 提供的 swift-format 默认规范检查全部 Swift 源码 |
 
-[架构视图](architecture.html) · [技术设计](design.md) · [开发流程](devflow.md) · [开发日志](devlog/README.md)
+[产品规划](design.md) · [技术讨论](technical.md) · [架构视图](architecture.html) · [开发流程](devflow.md) · [开发日志](devlog/README.md)
 
 架构视图依次展示模块定义、依赖关系与实现状态，点击模块可查看对应的源码依据。更新时先核对 `scripts/architecture.json` 中的状态与证据，再运行 `make architecture`。完成代码与设计核对后，用 `python3 scripts/update_architecture.py --source-hash` 获取基线，更新 `reviewedSourceHash` 和 `reviewedAt`。生成日期代表快照时间，状态核对日期代表人工审阅时间。
 

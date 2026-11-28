@@ -369,26 +369,25 @@
     },
     {
       "id": "ai",
-      "title": "AI 改稿服务",
-      "subtitle": "模型适配器",
+      "title": "AI 批注接入",
+      "subtitle": "外部 Agent",
       "layer": "adapters",
       "status": "planned",
-      "summary": "真实模型服务尚待接入，应用预览使用本地示例和措辞规则生成批注。",
+      "summary": "外部 Agent 接入待实现，应用预览使用本地示例和措辞规则生成批注。",
       "files": [],
       "symbols": [],
       "done": [],
       "next": [
-        "接入模型请求、响应和错误处理",
-        "通过 Keychain 保存密钥",
-        "用真实服务替换应用入口的演示适配器"
+        "提供写作上下文查询与批注提交接口",
+        "验证初始化专用写作会话，以及换用工具后接续文章上下文"
       ],
       "evidence": [
         {
-          "file": "design.md",
-          "needle": "| macOS 应用 | AI 改稿服务 |"
+          "file": "technical.md",
+          "needle": "| macOS 应用 | AI 批注接入 |"
         }
       ],
-      "definition": "实现改稿协议，将段落和改稿要求交给模型并返回结果。"
+      "definition": "向外部 Agent 提供写作上下文，接收批注与查证资料。"
     },
     {
       "id": "library",
@@ -407,7 +406,7 @@
       ],
       "evidence": [
         {
-          "file": "design.md",
+          "file": "technical.md",
           "needle": "| macOS 应用 | 本地文章库 |"
         }
       ],
@@ -481,7 +480,7 @@
       "from": "ai",
       "to": "rewrite",
       "kind": "planned",
-      "label": "实现协议"
+      "label": "交回批注"
     },
     {
       "from": "library",

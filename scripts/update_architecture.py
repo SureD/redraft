@@ -19,7 +19,7 @@ def git_output(*args):
 
 
 def review_files():
-    paths = [ROOT / "project.yml", ROOT / "design.md"]
+    paths = [ROOT / "project.yml", ROOT / "design.md", ROOT / "technical.md"]
     for directory in (ROOT / "App", ROOT / "Packages", ROOT / "Tests"):
         paths.extend(path for path in directory.rglob("*.swift") if ".build" not in path.parts)
     return sorted(path for path in paths if path.is_file())
@@ -84,7 +84,9 @@ def build_data(manifest):
         "reviewedAt": manifest.pop("reviewedAt"),
         "reviewStale": digest != manifest.pop("reviewedSourceHash"),
         "sourceHash": digest,
-        "dirty": bool(git_output("status", "--porcelain", "--", "App", "Packages", "Tests", "project.yml", "design.md")),
+        "dirty": bool(
+            git_output("status", "--porcelain", "--", "App", "Packages", "Tests", "project.yml", "design.md", "technical.md")
+        ),
     }
     manifest["sources"] = sources
     return manifest
